@@ -37,16 +37,35 @@
 
 static KeyValueStore trusted_issuer_store("issuer_store");
 static KeyValueStore policy_metadata_store("policy_metadata_store");
+static KeyValueStore issuer_type_mapping("issuer_type_mapping");
 
 const std::string md_issuer_path("issuer_path");
+const std::string md_policy_data("policy_data");
 const std::string initial_issuer_path("__ISSUER__");
+
+
+bool ww::identity::policy_agent::what(const Message &msg, const Environment &env, Response &rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ww::identity::VerifyingContext verifier;
+    std::vector<std::string> prefix_path;
+    prefix_path.push_back("gg");
+
+    std::string valid_pem_key = "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEiEnWZtKnzHZutccKe15hpBKelgqHQC2J\n5Wqae1bfbLZgsVNBzaU7OjFRgUjkOoJAKcPmPIC+NGMAA6DIe/YDOkMjm1yCGWgJ\ndyYf0W2V3UfvCd/auxn+D5D1wWFw4gEB\n-----END PUBLIC KEY-----";
+    std::string valid_chain_code = "MTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWY="; // base64 32 bytes
+    ASSERT_SUCCESS(rsp, verifier.initialize(prefix_path, valid_pem_key, valid_chain_code),
+                   "invalid request, invalid issuer public key/chain code");
+    return rsp.success(true);
+}
+
 
 // -----------------------------------------------------------------
 // FUNCTION: save_trusted_issuer
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::save_trusted_issuer(
-    const std::string& issuer_id,
-    const ww::identity::VerifyingContext& vc)
+    const std::string &issuer_id,
+    const ww::identity::VerifyingContext &vc,
+    const std::string &credential_type)
 {
     // ---------- save the trusted issuer ----------
     ww::value::Value trusted_issuer;
@@ -57,6 +76,10 @@ bool ww::identity::policy_agent::save_trusted_issuer(
     ERROR_IF_NOT(trusted_issuer.serialize(trusted_issuer_str),
                  "unexpected error, failed to serialize trusted issuer");
 
+    // TODO: atomic store of both the trusted issuer and its type?
+    ERROR_IF_NOT(issuer_type_mapping.set(issuer_id, credential_type),
+                 "unexpected error, failed to save issuer type mapping");
+
     return trusted_issuer_store.set(issuer_id, trusted_issuer_str);
 }
 
@@ -64,13 +87,21 @@ bool ww::identity::policy_agent::save_trusted_issuer(
 // FUNCTION: fetch_trusted_issuer
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::fetch_trusted_issuer(
-    const std::string& issuer_id,
-    ww::identity::VerifyingContext& vc)
+    const std::string &issuer_id,
+    ww::identity::VerifyingContext &vc,
+    const std::string &credential_type)
 {
     // ---------- fetch the trusted issuer ----------
     std::string trusted_issuer_str;
     ERROR_IF_NOT(trusted_issuer_store.get(issuer_id, trusted_issuer_str),
                  "unexpected error, failed to fetch trusted issuer");
+
+    // verify issuer type
+    std::string stored_credential_type;
+    ERROR_IF_NOT(issuer_type_mapping.get(issuer_id, stored_credential_type),
+                 "unexpected error, failed to fetch issuer type mapping");
+    ERROR_IF_NOT(stored_credential_type == credential_type,
+                 "invalid request, credential type does not match issuer type");
 
     ww::value::Object trusted_issuer;
     ERROR_IF_NOT(trusted_issuer.deserialize(trusted_issuer_str.c_str()),
@@ -85,8 +116,9 @@ bool ww::identity::policy_agent::fetch_trusted_issuer(
 // FUNCTION: verify_credential
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::verify_credential(
-    const ww::value::Object& vc_object,
-    ww::identity::VerifiableCredential& vc)
+    const ww::value::Object &vc_object,
+    ww::identity::VerifiableCredential &vc,
+    const std::string &credential_type)
 {
     ERROR_IF_NOT(vc.deserialize(vc_object), "invalid request, ill-formed credential");
 
@@ -102,7 +134,7 @@ bool ww::identity::policy_agent::verify_credential(
                  "invalid request, ill-formed signature");
 
     ww::identity::VerifyingContext verifier;
-    ERROR_IF_NOT(fetch_trusted_issuer(vc.proof_.verificationMethod_.id_, verifier),
+    ERROR_IF_NOT(fetch_trusted_issuer(vc.proof_.verificationMethod_.id_, verifier, credential_type),
                  "invalid request, unknown issuer");
 
     ERROR_IF_NOT(verifier.extend_context_path(vc.proof_.verificationMethod_.context_path_),
@@ -118,10 +150,10 @@ bool ww::identity::policy_agent::verify_credential(
 // FUNCTION: issue_credential
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::issue_credential(
-    const std::string& originator,
-    const std::string& contract_id,
-    const ww::identity::Credential& credential,
-    ww::identity::VerifiableCredential& vc)
+    const std::string &originator,
+    const std::string &contract_id,
+    const ww::identity::Credential &credential,
+    ww::identity::VerifiableCredential &vc)
 {
     // the context path that we are using is the path configured in the policy
     // agent (initially the initial_issuer_path) plus the hash of the originator's
@@ -139,7 +171,7 @@ bool ww::identity::policy_agent::issue_credential(
                  "unexpected error, failed to encode the originator");
 
     // setup the context path
-    std::vector<std::string> context_path = { initial_issuer_path, encoded_originator };
+    std::vector<std::string> context_path = {initial_issuer_path, encoded_originator};
     ww::identity::SigningContext context;
     std::vector<std::string> extended_path;
 
@@ -177,24 +209,24 @@ bool ww::identity::policy_agent::issue_credential(
 // RETURNS:
 //   true if successfully initialized
 // -----------------------------------------------------------------
-bool ww::identity::policy_agent::initialize_contract(const Environment& env)
+bool ww::identity::policy_agent::initialize_contract(const Environment &env)
 {
     // ---------- initialize the base contract ----------
-    if (! ww::identity::identity::initialize_contract(env))
+    if (!ww::identity::identity::initialize_contract(env))
         return false;
 
     // ----------initialize the trusted issuer ----------
     // the trusted issuer is the path to the root key used to
     // sign credentials that are generated by this policy agent
-    if (! policy_metadata_store.set(md_issuer_path, initial_issuer_path))
+    if (!policy_metadata_store.set(md_issuer_path, initial_issuer_path))
         return false;
 
-    std::vector<std::string> context_path = { initial_issuer_path };
+    std::vector<std::string> context_path = {initial_issuer_path};
     const std::string description("initial issuer path");
     const bool extensible = true;
 
     ww::identity::SigningContextManager manager = ww::identity::identity::get_context_manager();
-    if (! manager.add_context(extensible, description, context_path))
+    if (!manager.add_context(extensible, description, context_path))
         return false;
 
     return true;
@@ -219,7 +251,7 @@ bool ww::identity::policy_agent::initialize_contract(const Environment& env)
 // RETURNS:
 //   true if the registration succeeds
 // -----------------------------------------------------------------
-bool ww::identity::policy_agent::register_trusted_issuer(const Message& msg, const Environment& env, Response& rsp)
+bool ww::identity::policy_agent::register_trusted_issuer(const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_SENDER_IS_OWNER(env, rsp);
     ASSERT_INITIALIZED(rsp);
@@ -228,6 +260,7 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message& msg, con
                    "invalid request, missing required parameters");
 
     const std::string issuer_identity(msg.get_string("issuer_identity"));
+    const std::string credential_type(msg.get_string("credential_type"));
     const std::string public_key_str(msg.get_string("public_key"));
     const std::string chain_code_str(msg.get_string("chain_code"));
 
@@ -244,7 +277,7 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message& msg, con
     ww::identity::VerifyingContext verifier;
     ASSERT_SUCCESS(rsp, verifier.initialize(prefix_path, public_key_str, chain_code_str),
                    "invalid request, invalid issuer public key/chain code");
-    ASSERT_SUCCESS(rsp, save_trusted_issuer(issuer_identity, verifier),
+    ASSERT_SUCCESS(rsp, save_trusted_issuer(issuer_identity, verifier, credential_type),
                    "unexpected error, failed to save issuer information");
 
     // ---------- RETURN ----------
@@ -260,7 +293,7 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message& msg, con
 // RETURNS:
 //   true signature is verified
 // -----------------------------------------------------------------
-bool ww::identity::policy_agent::issue_policy_credential(const Message& msg, const Environment& env, Response& rsp)
+bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);
 
@@ -268,12 +301,42 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message& msg, con
                    "invalid request, missing required parameters");
 
     // Get the credential parameter
-    ww::value::Object vc_object_in;
-    ASSERT_SUCCESS(rsp, msg.get_value("credential", vc_object_in), "missing required parameter; credential");
+    ww::value::Object vc_objects;
+    ASSERT_SUCCESS(rsp, msg.get_value("credential", vc_objects), "missing required parameter; credential");
+
+    // Get the membership parameter
+    ww::value::Object membership_vc_object;
+    ASSERT_SUCCESS(rsp, vc_objects.get_value("membership", membership_vc_object), "missing required parameter; membership");
 
     // Verify the credential signature
-    ww::identity::VerifiableCredential vc_in;
-    ASSERT_SUCCESS(rsp, verify_credential(vc_object_in, vc_in), "invalid request, ill-formed credential");
+    ww::identity::VerifiableCredential membership_vc;
+    ASSERT_SUCCESS(rsp, verify_credential(membership_vc_object, membership_vc, "membership"), "invalid request, ill-formed credential");
+
+    // Get the consent parameter
+    ww::value::Object consent_vc_object;
+    ASSERT_SUCCESS(rsp, vc_objects.get_value("consent", consent_vc_object), "missing required parameter; consent");
+
+    // Verify the credential signature
+    ww::identity::VerifiableCredential consent_vc;
+    ASSERT_SUCCESS(rsp, verify_credential(consent_vc_object, consent_vc, "consent"), "invalid request, ill-formed credential");
+
+    // Get the key parameter
+    ww::value::Object key_vc_object;
+    ASSERT_SUCCESS(rsp, vc_objects.get_value("public_key", key_vc_object), "missing required parameter; public_key");
+
+    // Verify the credential signature
+    ww::identity::VerifiableCredential key_vc;
+    ASSERT_SUCCESS(rsp, verify_credential(key_vc_object, key_vc, "public_key"), "invalid request, ill-formed credential");
+
+    // get the policy data
+    std::string policy_data_str;
+    ASSERT_SUCCESS(rsp, policy_metadata_store.get(md_policy_data, policy_data_str),
+                   "unexpected error, failed to fetch policy data");
+
+    ww::value::Object policy_data_object;
+
+    ASSERT_SUCCESS(rsp, policy_data_object.deserialize(policy_data_str.c_str()),
+                   "unexpected error, failed to fetch policy data");
 
     // And build the veriable credential; just wanted to note that it would be
     // completely appropriate to make a constructor for VC's that took the
@@ -284,9 +347,10 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message& msg, con
     // ---------- RETURN ----------
     ww::identity::Credential credential_out;
     CONTRACT_SAFE_LOG(3, "prepare to evaluate the policy");
-
-    ASSERT_SUCCESS(rsp, policy_agent_function(vc_in.credential_, credential_out),
+    ASSERT_SUCCESS(rsp, policy_agent_function(membership_vc.credential_, consent_vc.credential_, key_vc.credential_, credential_out, policy_data_object),
                    "policy failed");
+
+    credential_out.issuer_.id_ = env.contract_id_;
 
     ww::identity::VerifiableCredential vc_out;
     ASSERT_SUCCESS(rsp, issue_credential(env.originator_id_, env.contract_id_, credential_out, vc_out),
@@ -297,4 +361,32 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message& msg, con
                    "unexpected error, failed to serialized the credential");
 
     return rsp.value(serialized_vc_out, false);
+}
+
+// -----------------------------------------------------------------
+// METHOD: issue_policy_credential
+//   Verify the incoming credential, process the policy decision and emit a new credential
+//
+// JSON PARAMETERS:
+//   POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA
+// RETURNS:
+//   true signature is verified
+// -----------------------------------------------------------------
+bool ww::identity::policy_agent::set_policy_data(const Message &msg, const Environment &env, Response &rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ASSERT_SUCCESS(rsp, msg.validate_schema(POLICY_AGENT_SET_POLICY_DATA_PARAM_SCHEMA),
+                   "invalid request, missing required parameters");
+
+    ww::value::Object policy_data;
+    ASSERT_SUCCESS(rsp, msg.get_value("data", policy_data), "missing required parameter; credential");
+
+    std::string serialized_policy_data;
+    ASSERT_SUCCESS(rsp, policy_data.serialize(serialized_policy_data), "failed to serialize policy data");
+
+    ASSERT_SUCCESS(rsp, policy_metadata_store.set(md_policy_data, serialized_policy_data), "failed to save policy data");
+
+    return rsp.success(true);
 }

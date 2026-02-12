@@ -41,16 +41,20 @@ fi
 # -----------------------------------------------------------------
 # Process command line arguments
 # -----------------------------------------------------------------
+COMMON_CONTRACT_ROOT=${PDO_HOME}/contracts/contracts
+
 SCRIPTDIR="$(dirname $(readlink --canonicalize ${BASH_SOURCE}))"
 SOURCE_ROOT="$(realpath ${SCRIPTDIR}/..)"
 
 F_SCRIPT=$(basename ${BASH_SOURCE[-1]} )
 F_SERVICE_HOST=${PDO_HOSTNAME}
+F_GUARDIAN_HOST=${PDO_HOSTNAME}
 F_LEDGER_URL=${PDO_LEDGER_URL}
-F_LOGLEVEL=${PDO_LOG_LEVEL:-info}
+F_LOGLEVEL=${PDO_LOG_LEVEL:-debug}
 F_LOGFILE=${PDO_LOG_FILE:-__screen__}
 F_CONTEXT_FILE=${SOURCE_ROOT}/test/test_context.toml
-F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/identity/context
+F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/download/context
+F_IDENTITY_TEMPLATES=${PDO_HOME}/contracts/identity/context
 F_PREFERRED=random
 
 F_USAGE='--host service-host | --ledger url | --loglevel [debug|info|warn] | --logfile file | --preferred [host]'
@@ -108,8 +112,18 @@ done
 
 TEST_ROOT=$(mktemp -d /tmp/test.XXXXXXXXX)
 
+if [ ! -f ${PDO_HOME}/keys/guardian_service.pem ]; then
+    yell create keys for the guardian service
+    ${KEYGEN} --keyfile ${PDO_HOME}/keys/guardian_service --format pem
+    F_KEY_FILES+=(${PDO_HOME}/keys/guardian_service.pem)
+
+    ${KEYGEN} --keyfile ${PDO_HOME}/keys/guardian_sservice --format pem
+    F_KEY_FILES+=(${PDO_HOME}/keys/guardian_sservice.pem)
+fi
+
 # -----------------------------------------------------------------
 function cleanup {
+    read -p "Press Enter to continue..."
     rm -f ${F_SERVICE_GROUPS_DB_FILE} ${F_SERVICE_GROUPS_DB_FILE}-lock
     rm -f ${F_SERVICE_DB_FILE} ${F_SERVICE_DB_FILE}-lock
     rm -f ${F_CONTEXT_FILE}
@@ -117,10 +131,38 @@ function cleanup {
         rm -f ${key_file}
     done
 
-    # rm -rf ${TEST_ROOT}
+    yell "shutdown guardian and storage service"
+    ${COMMON_CONTRACT_ROOT}/scripts/gs_stop.sh
+    ${COMMON_CONTRACT_ROOT}/scripts/ss_stop.sh
+
 }
 
 trap cleanup EXIT
+
+
+
+# -----------------------------------------------------------------
+# Start the guardian service and the storage service
+# -----------------------------------------------------------------
+try ${COMMON_CONTRACT_ROOT}/scripts/ss_start.sh -c -o ${PDO_HOME}/logs -- \
+    --loglevel debug \
+    --config guardian_service.toml \
+    --config-dir ${PDO_HOME}/etc/contracts \
+    --identity guardian_sservice
+
+sleep 3
+
+try ${COMMON_CONTRACT_ROOT}/scripts/gs_start.sh -c -o ${PDO_HOME}/logs -- \
+    --loglevel debug \
+    --config guardian_service.toml \
+    --config-dir ${PDO_HOME}/etc/contracts \
+    --identity guardian_service \
+    --bind host ${F_GUARDIAN_HOST} \
+    --bind service_host ${F_SERVICE_HOST}
+# -----------------------------------------------------------------
+
+
+
 
 # -----------------------------------------------------------------
 # create the service and groups databases from a site file; the site
@@ -145,17 +187,21 @@ cd "${SOURCE_ROOT}"
 rm -f ${F_CONTEXT_FILE}
 
 # create any necessary contexts here
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/signature_authority.toml \
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
     --bind identity membership_authority --bind user user1
 
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/signature_authority.toml \
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
     --bind identity consent_authority --bind user user2
 
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/signature_authority.toml \
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
     --bind identity public_key_authority --bind user user3
 
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.toml \
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/policy_agent.toml \
     --bind identity data_download --bind user user4
+
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
+    --bind token test1 --bind user user5 --bind url http://${F_GUARDIAN_HOST}:7900
+
 
 
 # -----------------------------------------------------------------
@@ -164,6 +210,7 @@ try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.t
 
 # =================================================================
 
+########### setup: membership_authority
 yell create a membership_authority and register signing context
 try id_signature_authority create ${OPTS} --contract identity.membership_authority.signature_authority \
     -d 'Membership Authority: issues institution membership credentials'
@@ -171,6 +218,26 @@ try id_signature_authority create ${OPTS} --contract identity.membership_authori
 try id_signature_authority register ${OPTS} --contract identity.membership_authority.signature_authority \
     -d 'fixed key satest' --fixed --path membership
 
+
+########### setup: consent_authority
+yell create a consent_authority and register signing context
+try id_signature_authority create ${OPTS} --contract identity.consent_authority.signature_authority \
+    -d 'Consent Authority: issues consent credentials'
+
+try id_signature_authority register ${OPTS} --contract identity.consent_authority.signature_authority \
+    -d 'fixed key satest' --fixed --path consent
+
+
+########### setup: public_key_authority
+yell create a public_key_authority and register signing context
+try id_signature_authority create ${OPTS} --contract identity.public_key_authority.signature_authority \
+    -d 'Public Key Authority: issues public key credentials'
+
+try id_signature_authority register ${OPTS} --contract identity.public_key_authority.signature_authority \
+    -d 'fixed key satest' --fixed --path public_key
+
+
+########### setup: data_download policy agent
 try id_policy_agent create ${OPTS} --contract identity.data_download.policy_agent \
     -d 'data download policy agent: accepts membership, consent, and public key VCs.'
 
@@ -178,3 +245,70 @@ yell register issuer1 with the policy agent
 try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
     --issuer identity.membership_authority.signature_authority --path membership --credential-type membership
 
+
+yell register issuer2 with the policy agent
+try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
+    --issuer identity.consent_authority.signature_authority --path consent --credential-type consent
+
+
+yell register issuer3 with the policy agent
+try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
+    --issuer identity.public_key_authority.signature_authority --path public_key --credential-type public_key
+
+yell configure the policy agent
+try id_policy_agent set_policy ${OPTS} --contract identity.data_download.policy_agent \
+    --data ${SCRIPTDIR}/policy_data.json
+
+
+########### setup: data download token
+
+yell create a token issuer and mint the tokens
+try ex_token_issuer create ${OPTS} --contract token.test1.token_issuer
+try download_token mint_tokens ${OPTS} --contract token.test1.token_object
+
+yell register a trusted VC issuer for token1
+try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
+    --issuer identity.data_download.policy_agent --path __ISSUER__ --credential-type download
+
+########### start
+yell generating user channel key
+python3 ${SCRIPTDIR}/generate_channel_key.py ${TEST_ROOT}/user_channel_key
+
+yell sign membership credential
+try id_signature_authority sign_credential ${OPTS} --contract identity.membership_authority.signature_authority \
+    --path membership --credential ${SCRIPTDIR}/credential_membership.json --signed-credential ${TEST_ROOT}/membership_vc.json
+
+yell sign consent credential
+try id_signature_authority sign_credential ${OPTS} --contract identity.consent_authority.signature_authority \
+    --path consent --credential ${SCRIPTDIR}/credential_consent.json --signed-credential ${TEST_ROOT}/consent_vc.json
+
+yell sign public key credential
+try id_signature_authority sign_credential ${OPTS} --contract identity.public_key_authority.signature_authority \
+    --path public_key --credential ${TEST_ROOT}/user_channel_key/credential_key.json --signed-credential ${TEST_ROOT}/public_key_vc.json
+
+yell combine credentials
+python3 ${SCRIPTDIR}/combine.py \
+    ${TEST_ROOT}/membership_vc.json \
+    ${TEST_ROOT}/consent_vc.json \
+    ${TEST_ROOT}/public_key_vc.json \
+    ${TEST_ROOT}/combined.json
+
+
+yell issue a credential
+try id_policy_agent issue_credential ${OPTS} --contract identity.data_download.policy_agent \
+    --signed-credential ${TEST_ROOT}/combined.json --issued-credential ${TEST_ROOT}/combined_vc.json
+
+
+yell download data
+try download_token do_download ${OPTS}  --contract token.test1.token_object.token_1 \
+    --vc-file ${TEST_ROOT}/combined_vc.json \
+    --output-file ${TEST_ROOT}/encrypted_data.bin
+
+yell read data
+
+python3 ${SCRIPTDIR}/read_data.py ${TEST_ROOT}/encrypted_data.bin \
+    ${TEST_ROOT}/user_channel_key/private_key.pem ${TEST_ROOT}/decrypted_data.txt
+
+cat ${TEST_ROOT}/decrypted_data.txt
+
+yell All tests passed

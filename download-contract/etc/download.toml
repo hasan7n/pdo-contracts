@@ -1,0 +1,5 @@
+# -----------------------------------------------------------------
+# Download family contract source
+# -----------------------------------------------------------------
+[ContractFamily.Download]
+download_token = { source = "${home}/contracts/download/_download_download_token.b64" }

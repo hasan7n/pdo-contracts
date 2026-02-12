@@ -25,18 +25,38 @@
 #include "common/Credential.h"
 #include "common/VerifyingContext.h"
 
+
+#define POLICY_AGENT_POLICY_DATA_SCHEMA       \
+    "{"                                                 \
+        SCHEMA_KW(consent_document, "") ","              \
+        SCHEMA_KW(allowed_institutions, [ "" ])             \
+    "}"
+
+#define POLICY_AGENT_SET_POLICY_DATA_PARAM_SCHEMA       \
+"{"                                                 \
+    SCHEMA_KWS(data, POLICY_AGENT_POLICY_DATA_SCHEMA)              \
+"}"
+
 #define POLICY_AGENT_REGISTER_ISSUER_PARAM_SCHEMA       \
     "{"                                                 \
         SCHEMA_KW(issuer_identity, "") ","              \
+        SCHEMA_KW(credential_type, "") ","              \
         SCHEMA_KW(context_path, [ "" ]) ","             \
         SCHEMA_KW(public_key, "") ","                   \
         SCHEMA_KW(chain_code, "")                       \
     "}"
 
 
+#define POLICY_AGENT_VERIFIABLE_CREDENTIAL_LIST_PARAM_SCHEMA       \
+"{"                                                         \
+    SCHEMA_KWS(membership, VERIFIABLE_CREDENTIAL_SCHEMA) ","    \
+    SCHEMA_KWS(consent, VERIFIABLE_CREDENTIAL_SCHEMA) ","    \
+    SCHEMA_KWS(public_key, VERIFIABLE_CREDENTIAL_SCHEMA)    \
+"}"
+
 #define POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA       \
     "{"                                                         \
-        SCHEMA_KWS(credential, VERIFIABLE_CREDENTIAL_SCHEMA)    \
+        SCHEMA_KWS(credential, POLICY_AGENT_VERIFIABLE_CREDENTIAL_LIST_PARAM_SCHEMA)    \
     "}"
 
 #define POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_RESULT_SCHEMA      \
@@ -52,11 +72,13 @@ namespace policy_agent
     bool initialize_contract(const Environment& env);
     bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);
     bool register_trusted_issuer(const Message& msg, const Environment& env, Response& rsp);
+    bool set_policy_data(const Message& msg, const Environment& env, Response& rsp);
+    bool what(const Message& msg, const Environment& env, Response& rsp);
 
     // Functions to extend the functionality of the policy agent
-    bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc);
-    bool fetch_trusted_issuer(const std::string& issuer_id, ww::identity::VerifyingContext& vc);
-    bool verify_credential(const ww::value::Object& vc_object, ww::identity::VerifiableCredential& vc);
+    bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const std::string& credential_type);
+    bool fetch_trusted_issuer(const std::string& issuer_id, ww::identity::VerifyingContext& vc, const std::string& credential_type);
+    bool verify_credential(const ww::value::Object& vc_object, ww::identity::VerifiableCredential& vc, const std::string& credential_type);
     bool issue_credential(
         const std::string& originator,
         const std::string& contract_id,
@@ -65,7 +87,7 @@ namespace policy_agent
 
     // This function must be defined by the contract, this is not a very clean way to do
     // this but WASM does not seem to support function pointers very well
-    bool policy_agent_function(const ww::identity::Credential&, ww::identity::Credential&);
+    bool policy_agent_function(const ww::identity::Credential&, const ww::identity::Credential&, const ww::identity::Credential&, ww::identity::Credential&, const ww::value::Object&);
 
 }; // policy_agent
 }; // identity

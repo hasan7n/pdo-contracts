@@ -39,12 +39,14 @@ __all__ = [
     'op_verify_credential',
     'op_register_trusted_issuer',
     'op_issue_policy_credential',
+    'op_set_policy_data'
     'cmd_register_trusted_issuer',
     'cmd_issue_policy_credential',
     'cmd_verify_credential',
     'cmd_register_signing_context',
     'cmd_get_verifying_key',
     'cmd_create_policy_agent',
+    'cmd_set_policy_data'
     'do_policy_agent',
     'do_policy_agent_contract',
     'load_commands',
@@ -100,9 +102,17 @@ class op_register_trusted_issuer(pcontract.contract_op_base) :
             default=[],
             required=False)
 
+        subparser.add_argument(
+            "-t",
+            "--credential-type",
+            help="Type of credentials issued by the issuer",
+            type=str,
+            required=True,
+        )
+
 
     @classmethod
-    def invoke(cls, state, session_params, issuer, path, key, chaincode, **kwargs) :
+    def invoke(cls, state, session_params, issuer, path, key, chaincode, credential_type, **kwargs) :
         session_params['commit'] = True
 
         params = {
@@ -110,6 +120,7 @@ class op_register_trusted_issuer(pcontract.contract_op_base) :
             'issuer_identity' : issuer,
             'public_key' : key,
             'context_path' : path,
+            'credential_type': credential_type,
         }
 
         message = invocation_request('register_trusted_issuer', **params)
@@ -149,6 +160,36 @@ class op_issue_policy_credential(pcontract.contract_op_base) :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+
+class op_set_policy_data(pcontract.contract_op_base) :
+
+    name = "set_policy_data"
+    help = "set_policy_data"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-d', '--data',
+            help='Data for the policy (JSON)',
+            type=pbuilder.invocation_parameter,
+            required=True)
+
+    @classmethod
+    def invoke(cls, state, session_params, data, **kwargs) :
+        session_params['commit'] = True
+
+        params = {
+            'data' : data,
+        }
+
+        message = invocation_request('set_policy_data', **params)
+        result = pcontract_cmd.send_to_contract(state, message, **session_params)
+        cls.log_invocation(message, result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 class cmd_register_trusted_issuer(pcommand.contract_command_base) :
     name = "register"
     help = "Register a trusted issuer of input credentials"
@@ -169,8 +210,16 @@ class cmd_register_trusted_issuer(pcommand.contract_command_base) :
             default=[],
             required=False)
 
+        subparser.add_argument(
+                "-t",
+                "--credential-type",
+                help="Type of credentials issued by the issuer",
+                type=str,
+                required=True,
+            )
+
     @classmethod
-    def invoke(cls, state, context, issuer, path, **kwargs) :
+    def invoke(cls, state, context, issuer, path, credential_type, **kwargs) :
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if not save_file :
             raise ValueError('signature authority contract must be created and initialized')
@@ -202,6 +251,7 @@ class cmd_register_trusted_issuer(pcommand.contract_command_base) :
             path=path,
             key=key_data,
             chaincode=chaincode_data,
+            credential_type=credential_type,
             **kwargs)
 
         cls.display('registered trusted issuer {}'.format(issuer))
@@ -247,6 +297,42 @@ class cmd_issue_policy_credential(pcommand.contract_command_base) :
 
         cls.display('saved issued credential to {}'.format(issued_credential))
         return True
+
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class cmd_set_policy_data(pcommand.contract_command_base) :
+    name = "set_policy"
+    help = "set_policy"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '--data',
+            help='The name of the file where the data is stored',
+            type=str,
+            required=True)
+
+    @classmethod
+    def invoke(cls, state, context, data, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('policy agent contract must be created and initialized')
+
+        with open(data, "r") as fp :
+            data = json.load(fp)
+
+        session = pbuilder.SessionParameters(save_file=save_file)
+        pcontract.invoke_contract_op(
+            op_set_policy_data,
+            state, context, session,
+            data=data,
+            **kwargs)
+
+        cls.display('data set {}'.format(data))
+
+        return True
+
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
@@ -304,9 +390,10 @@ __operations__ = [
     op_verify_credential,
     op_register_trusted_issuer,
     op_issue_policy_credential,
+    op_set_policy_data
 ]
 
-do_policy_agent_contract = pcontract.create_shell_command('identity_contract', __operations__)
+do_policy_agent_contract = pcontract.create_shell_command('policy_agent_contract', __operations__)
 
 __commands__ = [
     cmd_get_verifying_key,
@@ -315,9 +402,10 @@ __commands__ = [
     cmd_register_trusted_issuer,
     cmd_issue_policy_credential,
     cmd_create_policy_agent,
+    cmd_set_policy_data
 ]
 
-do_policy_agent = pcommand.create_shell_command('identity', __commands__)
+do_policy_agent = pcommand.create_shell_command('policy_agent', __commands__)
 
 # -----------------------------------------------------------------
 # Enable binding of the shell independent version to a pdo-shell command
