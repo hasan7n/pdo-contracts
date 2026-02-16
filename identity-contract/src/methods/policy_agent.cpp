@@ -14,6 +14,8 @@
  */
 
 #include <string>
+#include <map>
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -43,21 +45,22 @@ const std::string md_issuer_path("issuer_path");
 const std::string md_policy_data("policy_data");
 const std::string initial_issuer_path("__ISSUER__");
 
-
-bool ww::identity::policy_agent::what(const Message &msg, const Environment &env, Response &rsp)
+// -----------------------------------------------------------------
+// UTILITY
+// -----------------------------------------------------------------
+static const char *get_expected_vc_list_schema(const std::map<std::string, const char *> claims_schema_map)
 {
-    ASSERT_SENDER_IS_OWNER(env, rsp);
-    ww::identity::VerifyingContext verifier;
-    std::vector<std::string> prefix_path;
-    prefix_path.push_back("gg");
+    ww::value::Object schema;
 
-    std::string valid_pem_key = "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEiEnWZtKnzHZutccKe15hpBKelgqHQC2J\n5Wqae1bfbLZgsVNBzaU7OjFRgUjkOoJAKcPmPIC+NGMAA6DIe/YDOkMjm1yCGWgJ\ndyYf0W2V3UfvCd/auxn+D5D1wWFw4gEB\n-----END PUBLIC KEY-----";
-    std::string valid_chain_code = "MTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWY="; // base64 32 bytes
-    ASSERT_SUCCESS(rsp, verifier.initialize(prefix_path, valid_pem_key, valid_chain_code),
-                   "invalid request, invalid issuer public key/chain code");
-    return rsp.success(true);
+    for (const auto &pair : claims_schema_map)
+    {
+        ww::value::Object vc_schema;
+        vc_schema.deserialize(VERIFIABLE_CREDENTIAL_SCHEMA);
+        schema.set_value(pair.first.c_str(), vc_schema);
+    }
+
+    return schema.serialize();
 }
-
 
 // -----------------------------------------------------------------
 // FUNCTION: save_trusted_issuer
@@ -297,36 +300,39 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, con
 {
     ASSERT_INITIALIZED(rsp);
 
-    ASSERT_SUCCESS(rsp, msg.validate_schema(POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA),
+    const std::map<std::string, const char *> claims_schema_map = get_claims_schemas();
+    const char *issue_policy_credential_param_schema = get_expected_vc_list_schema(claims_schema_map);
+
+    ASSERT_SUCCESS(rsp, msg.validate_schema(issue_policy_credential_param_schema),
                    "invalid request, missing required parameters");
 
-    // Get the credential parameter
-    ww::value::Object vc_objects;
-    ASSERT_SUCCESS(rsp, msg.get_value("credential", vc_objects), "missing required parameter; credential");
+    std::map<std::string, ww::identity::Credential> credentials;
 
-    // Get the membership parameter
-    ww::value::Object membership_vc_object;
-    ASSERT_SUCCESS(rsp, vc_objects.get_value("membership", membership_vc_object), "missing required parameter; membership");
+    for (const auto &[credential_type, claims_schema] : claims_schema_map)
+    {
 
-    // Verify the credential signature
-    ww::identity::VerifiableCredential membership_vc;
-    ASSERT_SUCCESS(rsp, verify_credential(membership_vc_object, membership_vc, "membership"), "invalid request, ill-formed credential");
+        // get credential object
+        ww::value::Object vc_object;
+        ASSERT_SUCCESS(rsp, msg.get_value(credential_type.c_str(), vc_object),
+                       ("missing required parameter; " + credential_type).c_str());
 
-    // Get the consent parameter
-    ww::value::Object consent_vc_object;
-    ASSERT_SUCCESS(rsp, vc_objects.get_value("consent", consent_vc_object), "missing required parameter; consent");
+        // Verify the credential
+        ww::identity::VerifiableCredential vc;
+        ASSERT_SUCCESS(rsp, verify_credential(vc_object, vc, credential_type),
+                       ("invalid request, ill-formed credential for " + credential_type).c_str());
 
-    // Verify the credential signature
-    ww::identity::VerifiableCredential consent_vc;
-    ASSERT_SUCCESS(rsp, verify_credential(consent_vc_object, consent_vc, "consent"), "invalid request, ill-formed credential");
+        // Verify claims
+        ASSERT_SUCCESS(rsp, vc.credential_.credentialSubject_.claims_.validate_schema(claims_schema),
+                       ("invalid claims for " + credential_type).c_str());
 
-    // Get the key parameter
-    ww::value::Object key_vc_object;
-    ASSERT_SUCCESS(rsp, vc_objects.get_value("public_key", key_vc_object), "missing required parameter; public_key");
+        // store credential
+        ww::value::Object tmp;
+        ASSERT_SUCCESS(rsp, vc.credential_.serialize(tmp),
+                       ("Unexpected error when serializng credential " + credential_type).c_str());
 
-    // Verify the credential signature
-    ww::identity::VerifiableCredential key_vc;
-    ASSERT_SUCCESS(rsp, verify_credential(key_vc_object, key_vc, "public_key"), "invalid request, ill-formed credential");
+        ASSERT_SUCCESS(rsp, credentials[credential_type].deserialize(tmp),
+                       ("Unexpected error when storing credential " + credential_type).c_str());
+    }
 
     // get the policy data
     std::string policy_data_str;
@@ -347,7 +353,7 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, con
     // ---------- RETURN ----------
     ww::identity::Credential credential_out;
     CONTRACT_SAFE_LOG(3, "prepare to evaluate the policy");
-    ASSERT_SUCCESS(rsp, policy_agent_function(membership_vc.credential_, consent_vc.credential_, key_vc.credential_, credential_out, policy_data_object),
+    ASSERT_SUCCESS(rsp, policy_agent_function(credentials, policy_data_object, credential_out),
                    "policy failed");
 
     credential_out.issuer_.id_ = env.contract_id_;
@@ -376,15 +382,13 @@ bool ww::identity::policy_agent::set_policy_data(const Message &msg, const Envir
 {
     ASSERT_SENDER_IS_OWNER(env, rsp);
     ASSERT_INITIALIZED(rsp);
+    const char *policy_data_schema = get_policy_data_schema();
 
-    ASSERT_SUCCESS(rsp, msg.validate_schema(POLICY_AGENT_SET_POLICY_DATA_PARAM_SCHEMA),
+    ASSERT_SUCCESS(rsp, msg.validate_schema(policy_data_schema),
                    "invalid request, missing required parameters");
 
-    ww::value::Object policy_data;
-    ASSERT_SUCCESS(rsp, msg.get_value("data", policy_data), "missing required parameter; credential");
-
     std::string serialized_policy_data;
-    ASSERT_SUCCESS(rsp, policy_data.serialize(serialized_policy_data), "failed to serialize policy data");
+    ASSERT_SUCCESS(rsp, msg.serialize(serialized_policy_data), "failed to serialize policy data");
 
     ASSERT_SUCCESS(rsp, policy_metadata_store.set(md_policy_data, serialized_policy_data), "failed to save policy data");
 

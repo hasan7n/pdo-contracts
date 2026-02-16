@@ -148,9 +148,7 @@ class op_issue_policy_credential(pcontract.contract_op_base) :
     def invoke(cls, state, session_params, credential, **kwargs) :
         session_params['commit'] = True
 
-        params = {
-            'credential' : credential,
-        }
+        params = credential
 
         message = invocation_request('issue_policy_credential', **params)
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
@@ -178,9 +176,7 @@ class op_set_policy_data(pcontract.contract_op_base) :
     def invoke(cls, state, session_params, data, **kwargs) :
         session_params['commit'] = True
 
-        params = {
-            'data' : data,
-        }
+        params = data
 
         message = invocation_request('set_policy_data', **params)
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
