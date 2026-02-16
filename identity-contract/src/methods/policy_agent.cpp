@@ -39,23 +39,24 @@
 
 static KeyValueStore trusted_issuer_store("issuer_store");
 static KeyValueStore policy_metadata_store("policy_metadata_store");
+// TODO: multiple credential types by same issuer?
 static KeyValueStore issuer_type_mapping("issuer_type_mapping");
 
 const std::string md_issuer_path("issuer_path");
 const std::string md_policy_data("policy_data");
 const std::string initial_issuer_path("__ISSUER__");
+const std::string initial_policy_data("{}");
 
 // -----------------------------------------------------------------
 // UTILITY
 // -----------------------------------------------------------------
-static const char *get_expected_vc_list_schema(const std::map<std::string, const char *> claims_schema_map)
+static const char *get_expected_vc_list_schema(const std::map<std::string, const char *> &claims_schema_map)
 {
     ww::value::Object schema;
-
+    ww::value::Object vc_schema;
+    vc_schema.deserialize(VERIFIABLE_CREDENTIAL_SCHEMA);
     for (const auto &pair : claims_schema_map)
     {
-        ww::value::Object vc_schema;
-        vc_schema.deserialize(VERIFIABLE_CREDENTIAL_SCHEMA);
         schema.set_value(pair.first.c_str(), vc_schema);
     }
 
@@ -104,7 +105,7 @@ bool ww::identity::policy_agent::fetch_trusted_issuer(
     ERROR_IF_NOT(issuer_type_mapping.get(issuer_id, stored_credential_type),
                  "unexpected error, failed to fetch issuer type mapping");
     ERROR_IF_NOT(stored_credential_type == credential_type,
-                 "invalid request, credential type does not match issuer type");
+                 "invalid request, credential type does not match the trusted issuer type");
 
     ww::value::Object trusted_issuer;
     ERROR_IF_NOT(trusted_issuer.deserialize(trusted_issuer_str.c_str()),
@@ -232,6 +233,10 @@ bool ww::identity::policy_agent::initialize_contract(const Environment &env)
     if (!manager.add_context(extensible, description, context_path))
         return false;
 
+    // set an empty policy data
+    if (!policy_metadata_store.set(md_policy_data, initial_policy_data))
+        return false;
+
     return true;
 }
 
@@ -342,7 +347,7 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, con
     ww::value::Object policy_data_object;
 
     ASSERT_SUCCESS(rsp, policy_data_object.deserialize(policy_data_str.c_str()),
-                   "unexpected error, failed to fetch policy data");
+                   "unexpected error, failed to deserialize policy data");
 
     // And build the veriable credential; just wanted to note that it would be
     // completely appropriate to make a constructor for VC's that took the
