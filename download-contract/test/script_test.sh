@@ -196,8 +196,8 @@ try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_aut
 try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
     --bind identity public_key_authority --bind user user3
 
-try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/policy_agent.toml \
-    --bind identity data_download --bind user user4
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.toml \
+    --bind identity simple_download --bind user user4
 
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
     --bind token test1 --bind user user5 --bind url http://${F_GUARDIAN_HOST}:7900
@@ -238,25 +238,25 @@ try id_signature_authority register ${OPTS} --contract identity.public_key_autho
 
 
 ########### setup: data_download policy agent
-try id_policy_agent create ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy create ${OPTS} --contract download.simple_download.policy_agent \
     -d 'data download policy agent: accepts membership, consent, and public key VCs.'
 
 yell register issuer1 with the policy agent
-try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
     --issuer identity.membership_authority.signature_authority --path membership --credential-type membership
 
 
 yell register issuer2 with the policy agent
-try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
     --issuer identity.consent_authority.signature_authority --path consent --credential-type consent
 
 
 yell register issuer3 with the policy agent
-try id_policy_agent register ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
     --issuer identity.public_key_authority.signature_authority --path public_key --credential-type public_key
 
 yell configure the policy agent
-try id_policy_agent set_policy ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy set_policy ${OPTS} --contract download.simple_download.policy_agent \
     --data ${SCRIPTDIR}/policy_data.json
 
 
@@ -268,7 +268,7 @@ try download_token mint_tokens ${OPTS} --contract token.test1.token_object
 
 yell register a trusted VC issuer for token1
 try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
-    --issuer identity.data_download.policy_agent --path __ISSUER__ --credential-type download
+    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type download
 
 ########### start
 yell generating user channel key
@@ -295,7 +295,7 @@ python3 ${SCRIPTDIR}/combine.py \
 
 
 yell issue a credential
-try id_policy_agent issue_credential ${OPTS} --contract identity.data_download.policy_agent \
+try download_policy issue_credential ${OPTS} --contract download.simple_download.policy_agent \
     --signed-credential ${TEST_ROOT}/combined.json --issued-credential ${TEST_ROOT}/combined_vc.json
 
 
@@ -310,5 +310,6 @@ python3 ${SCRIPTDIR}/read_data.py ${TEST_ROOT}/encrypted_data.bin \
     ${TEST_ROOT}/user_channel_key/private_key.pem ${TEST_ROOT}/decrypted_data.txt
 
 cat ${TEST_ROOT}/decrypted_data.txt
+echo
 
 yell All tests passed
