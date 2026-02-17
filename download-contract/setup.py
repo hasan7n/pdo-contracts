@@ -98,6 +98,7 @@ setup(
     entry_points={
         "console_scripts": [
             "download_token=pdo.download.scripts.scripts:download_token",
+            "download_policy=pdo.identity.scripts.scripts:policy_agent",
             "guardian_service=pdo.contracts.guardian.scripts.guardianCLI:Main",
         ]
     },

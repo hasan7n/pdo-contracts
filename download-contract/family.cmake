@@ -13,6 +13,6 @@
 # limitations under the License.
 
 SET(CF_NAME download)
-SET(CF_CONTRACTS download_token)
+SET(CF_CONTRACTS download_token policy_agent)
 
 STRING(TOUPPER ${CF_NAME} CF_HANDLE)
