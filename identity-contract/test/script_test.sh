@@ -249,11 +249,12 @@ try id_policy_agent create ${OPTS} --contract identity.patest.policy_agent \
 
 yell register issuer with the policy agent
 try id_policy_agent register ${OPTS} --contract identity.patest.policy_agent \
-    --issuer identity.satest.signature_authority --path satest ext1
+    --issuer identity.satest.signature_authority --path satest ext1 --credential-type dummy
 
 yell issue a simple credential
+(echo '{"dummy":' && cat ${TEST_ROOT}/sa_credential1.json && echo '}') > ${TEST_ROOT}/sa_credential1_prepared.json
 try id_policy_agent issue_credential ${OPTS} --contract identity.patest.policy_agent \
-    --signed-credential ${TEST_ROOT}/sa_credential1.json --issued-credential ${TEST_ROOT}/pa_credential1.json
+    --signed-credential ${TEST_ROOT}/sa_credential1_prepared.json --issued-credential ${TEST_ROOT}/pa_credential1.json
 
 say issued credential is:
 say $(<${TEST_ROOT}/pa_credential1.json)
@@ -262,8 +263,9 @@ try id_policy_agent verify_credential ${OPTS} --contract identity.patest.policy_
     --signed-credential ${TEST_ROOT}/pa_credential1.json
 
 yell issue a complex credential
+(echo '{"dummy":' && cat ${TEST_ROOT}/sa_credential2.json && echo '}') > ${TEST_ROOT}/sa_credential2_prepared.json
 try id_policy_agent issue_credential ${OPTS} --contract identity.patest.policy_agent \
-    --signed-credential ${TEST_ROOT}/sa_credential2.json --issued-credential ${TEST_ROOT}/pa_credential2.json
+    --signed-credential ${TEST_ROOT}/sa_credential2_prepared.json --issued-credential ${TEST_ROOT}/pa_credential2.json
 
 say issued verifiable credential is:
 say $(<${TEST_ROOT}/pa_credential2.json)
