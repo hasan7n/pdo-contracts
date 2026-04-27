@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — PDO GUI{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+
+<div class="card-grid">
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Signature Authorities</h2>
+            <a href="{% url 'sa_create' %}" class="btn btn-sm">+ New</a>
+        </div>
+        {% if signature_authorities %}
+            <ul class="item-list">
+                {% for sa in signature_authorities %}
+                    <li>
+                        <a href="{% url 'sa_dashboard' sa.pk %}">{{ sa.name }}</a>
+                        <span class="meta">{{ sa.user.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty-state">No signature authorities yet.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Policies</h2>
+            <a href="{% url 'policy_create' %}" class="btn btn-sm">+ New</a>
+        </div>
+        {% if policies %}
+            <ul class="item-list">
+                {% for policy in policies %}
+                    <li>
+                        <a href="{% url 'policy_dashboard' policy.pk %}">{{ policy.name }}</a>
+                        <span class="meta">{{ policy.user.name }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="empty-state">No policies yet.</p>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

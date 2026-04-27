@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ sa.name }} — Signature Authority{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ sa.name }}</h1>
+<p class="subtitle">{{ sa.description }} &nbsp;·&nbsp; owned by <strong>{{ sa.user.name }}</strong></p>
+
+<!-- Sign Credential Section -->
+<div class="card">
+    <div class="card-header"><h2>Sign a Credential</h2></div>
+
+    <form id="sign-credential-form">
+        {% csrf_token %}
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="template-select">Credential Template</label>
+                <select id="template-select" required>
+                    <option value="">— select template —</option>
+                    {% for tpl in templates %}
+                        <option value="{{ tpl.pk }}">{{ tpl.template_type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="subject-select">Subject (User)</label>
+                <select id="subject-select" required>
+                    <option value="">— select user —</option>
+                    {% for user in users %}
+                        <option value="{{ user.pk }}" data-name="{{ user.name }}">{{ user.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div id="claims-container" class="claims-container hidden">
+            <h3>Claims</h3>
+            <div id="claims-fields"></div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="sign-btn" disabled>
+                Sign Credential
+            </button>
+        </div>
+
+        <div id="sign-result" class="alert hidden"></div>
+    </form>
+</div>
+
+<!-- Issued Credentials Section -->
+<div class="card">
+    <div class="card-header"><h2>Issued Credentials</h2></div>
+    {% if vcs %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Subject</th>
+                    <th>Signing Context</th>
+                    <th>Credential (preview)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vc in vcs %}
+                    <tr>
+                        <td>{{ vc.user.name }}</td>
+                        <td>{{ sa.signing_context }}</td>
+                        <td class="vc-preview">{{ vc.vc|truncatechars:80 }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty-state">No credentials issued yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const TEMPLATES_DATA = {{ templates_json|safe }};
+    const SIGN_URL = "{% url 'sa_sign_credential' sa.pk %}";
+    const CHANNEL_KEY_URL = "/api/users/{id}/channel-public-key/";
+</script>
+<script src="{% static 'js/signature_authority.js' %}"></script>
+{% endblock %}

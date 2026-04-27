@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ policy.name }} — Policy{% endblock %}
+
+{% block content %}
+<h1 class="page-title">{{ policy.name }}</h1>
+<p class="subtitle">
+    {{ policy.description }} &nbsp;·&nbsp; owned by <strong>{{ policy.user.name }}</strong>
+    &nbsp;·&nbsp; guardian: <code>{{ policy.guardian_url }}:{{ policy.guardian_port }}</code>
+</p>
+
+<!-- Tab Navigation -->
+<div class="tabs">
+    <button class="tab-btn active" data-tab="trusted-authorities">Trusted Authorities</button>
+    <button class="tab-btn" data-tab="policy-data">Policy Data</button>
+    <button class="tab-btn" data-tab="download">Download Data</button>
+</div>
+
+<!-- Tab: Trusted Authorities -->
+<div id="tab-trusted-authorities" class="tab-content card">
+    <div class="card-header"><h2>Trusted VC Issuers</h2></div>
+
+    {% if trusted_authorities %}
+        <table class="data-table">
+            <thead>
+                <tr><th>Signature Authority</th><th>Credential Type</th></tr>
+            </thead>
+            <tbody>
+                {% for ta in trusted_authorities %}
+                    <tr>
+                        <td>{{ ta.signature_authority.name }}</td>
+                        <td>{{ ta.credential_type }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty-state">No trusted authorities registered yet.</p>
+    {% endif %}
+
+    <hr>
+    <h3>Register a Trusted Authority</h3>
+    <form id="register-authority-form">
+        {% csrf_token %}
+        <div class="form-row">
+            <div class="form-group">
+                <label for="sa-select">Signature Authority</label>
+                <select id="sa-select" required>
+                    <option value="">— select —</option>
+                    {% for sa in signature_authorities %}
+                        <option value="{{ sa.pk }}">{{ sa.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="credential-type-input">Credential Type</label>
+                <input type="text" id="credential-type-input" required placeholder="e.g. membership">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Register</button>
+        </div>
+        <div id="register-result" class="alert hidden"></div>
+    </form>
+</div>
+
+<!-- Tab: Policy Data -->
+<div id="tab-policy-data" class="tab-content card hidden">
+    <div class="card-header"><h2>Policy Data</h2></div>
+
+    {% if policy_data_json %}
+        <div class="form-group">
+            <label>Current Policy Data</label>
+            <pre class="code-block">{{ policy_data_json }}</pre>
+        </div>
+    {% else %}
+        <p class="empty-state">No policy data set yet.</p>
+    {% endif %}
+
+    <hr>
+    <h3>Set Policy Data</h3>
+    <form id="set-policy-data-form">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="policy-data-input">Policy Data (JSON dictionary)</label>
+            <textarea id="policy-data-input" rows="8" required
+                      placeholder='{"allowed_institutions": ["abc", "def"], "consent_document": "doc_did"}'></textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Set Policy Data</button>
+        </div>
+        <div id="set-data-result" class="alert hidden"></div>
+    </form>
+</div>
+
+<!-- Tab: Download Data -->
+<div id="tab-download" class="tab-content card hidden">
+    <div class="card-header"><h2>Download Data</h2></div>
+    <p>Select a user to evaluate the policy and retrieve their encrypted data.</p>
+
+    <form id="download-form">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="download-user-select">Act As (User)</label>
+            <select id="download-user-select" required>
+                <option value="">— select user —</option>
+                {% for user in users %}
+                    <option value="{{ user.pk }}">{{ user.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Download Data</button>
+        </div>
+        <div id="download-result" class="alert hidden"></div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const REGISTER_AUTHORITY_URL = "{% url 'policy_register_authority' policy.pk %}";
+    const SET_POLICY_DATA_URL = "{% url 'policy_set_data' policy.pk %}";
+    const DOWNLOAD_URL = "{% url 'download_data' policy.pk %}";
+</script>
+<script src="{% static 'js/policy.js' %}"></script>
+<script src="{% static 'js/download.js' %}"></script>
+{% endblock %}
