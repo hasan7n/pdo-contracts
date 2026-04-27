@@ -61,10 +61,11 @@ if (registerForm) {
         registerResult.className = 'alert hidden';
 
         const saId = document.getElementById('sa-select').value;
-        const credType = document.getElementById('credential-type-input').value.trim();
+        const credTypeEl = document.getElementById('credential-type-select');
+        const credType = credTypeEl ? credTypeEl.value : '';
 
         if (!saId || !credType) {
-            registerResult.textContent = 'Please select a signature authority and enter a credential type.';
+            registerResult.textContent = 'Please select a signature authority and a credential type.';
             registerResult.className = 'alert alert-error';
             return;
         }

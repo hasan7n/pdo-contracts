@@ -13,15 +13,7 @@ if (downloadForm) {
         e.preventDefault();
         downloadResult.className = 'alert hidden';
 
-        const userId = document.getElementById('download-user-select').value;
-        if (!userId) {
-            downloadResult.textContent = 'Please select a user.';
-            downloadResult.className = 'alert alert-error';
-            return;
-        }
-
         const formData = new FormData();
-        formData.append('user_id', userId);
         formData.append('csrfmiddlewaretoken', getCsrfToken());
 
         document.getElementById('loading-message').textContent =

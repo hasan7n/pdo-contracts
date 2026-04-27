@@ -32,6 +32,22 @@ body {
 
 .nav-links { display: flex; gap: 1.2rem; }
 
+.nav-user { display: flex; align-items: center; gap: 0.5rem; }
+.nav-user-label { color: #b0c8e8; font-size: 0.85rem; white-space: nowrap; }
+.nav-user-form { display: flex; }
+.nav-user-select {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    width: auto;
+}
+.nav-user-select:focus { outline: none; border-color: rgba(255,255,255,0.5); box-shadow: none; background: rgba(255,255,255,0.1); }
+.nav-user-select option { background: #1e3a5f; color: #fff; }
+
 .nav-links a {
     color: #b0c8e8;
     text-decoration: none;

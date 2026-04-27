@@ -11,15 +11,18 @@ from ..models import CredentialTemplate, SignatureAuthority, User, VerifiableCre
 
 
 def create(request):
-    users = User.objects.all()
-
     if request.method == 'POST':
-        user_id = request.POST.get('act_as')
         name = request.POST.get('name', '').strip()
         description = request.POST.get('description', '').strip()
 
+        active_user_id = request.session.get('active_user_id')
+        if not active_user_id:
+            return render(request, 'signature_authority_create.html', {
+                'error': 'No active user selected. Please choose a user in the navbar.',
+            })
+
         try:
-            user = User.objects.get(pk=user_id)
+            user = User.objects.get(pk=active_user_id)
             pdo_runner.create_signature_authority(name, user.name, description)
 
             sa = SignatureAuthority.objects.create(
@@ -31,12 +34,9 @@ def create(request):
             return redirect('sa_dashboard', pk=sa.pk)
 
         except Exception as e:
-            return render(request, 'signature_authority_create.html', {
-                'users': users,
-                'error': str(e),
-            })
+            return render(request, 'signature_authority_create.html', {'error': str(e)})
 
-    return render(request, 'signature_authority_create.html', {'users': users})
+    return render(request, 'signature_authority_create.html', {})
 
 
 def dashboard(request, pk):
@@ -44,7 +44,6 @@ def dashboard(request, pk):
     templates = CredentialTemplate.objects.all()
     vcs = VerifiableCredential.objects.filter(signature_authority=sa).select_related('user')
 
-    # Build template data for JS consumption
     templates_data = {
         str(t.pk): {'type_': t.template_type, 'claims_keys': t.claims_keys}
         for t in templates

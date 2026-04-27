@@ -1,9 +1,12 @@
 from django.urls import path
 
-from .views import download, home, policy, signature_authority
+from .views import api, download, home, policy, signature_authority
 
 urlpatterns = [
     path('', home.index, name='index'),
+
+    # Active user selection
+    path('api/set-active-user/', api.set_active_user, name='set_active_user'),
 
     # Signature Authority pages
     path('signature-authority/create/', signature_authority.create, name='sa_create'),

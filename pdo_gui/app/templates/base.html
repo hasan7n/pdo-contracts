@@ -14,6 +14,19 @@
             <a href="{% url 'sa_create' %}">+ Signature Authority</a>
             <a href="{% url 'policy_create' %}">+ Policy</a>
         </div>
+        <div class="nav-user">
+            <span class="nav-user-label">Acting as:</span>
+            <form method="post" action="{% url 'set_active_user' %}" class="nav-user-form">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <select name="user_id" class="nav-user-select" onchange="this.form.submit()">
+                    <option value="">— select user —</option>
+                    {% for u in all_users %}
+                        <option value="{{ u.pk }}"{% if active_user and active_user.pk == u.pk %} selected{% endif %}>{{ u.name }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
     </nav>
 
     <main class="container">

@@ -11,40 +11,36 @@
         <div class="alert alert-error">{{ error }}</div>
     {% endif %}
 
-    <form id="sa-create-form" method="post">
-        {% csrf_token %}
+    {% if not active_user %}
+        <div class="alert alert-error">No active user selected. Please choose a user in the navbar before creating a signature authority.</div>
+    {% else %}
+        <p class="subtitle">Creating as <strong>{{ active_user.name }}</strong></p>
 
-        <div class="form-group">
-            <label for="act_as">Act As</label>
-            <select name="act_as" id="act_as" required>
-                <option value="">— select user —</option>
-                {% for user in users %}
-                    <option value="{{ user.pk }}">{{ user.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
+        <form id="sa-create-form" method="post">
+            {% csrf_token %}
 
-        <div class="form-group">
-            <label for="name">Name</label>
-            <input type="text" name="name" id="name" required
-                   placeholder="e.g. membership_authority"
-                   pattern="[a-zA-Z0-9_]+" title="Letters, digits, and underscores only">
-            <small>Used as the contract identity and signing context path.</small>
-        </div>
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" name="name" id="name" required
+                       placeholder="e.g. membership_authority"
+                       pattern="[a-zA-Z0-9_]+" title="Letters, digits, and underscores only">
+                <small>Used as the contract identity and signing context path.</small>
+            </div>
 
-        <div class="form-group">
-            <label for="description">Description</label>
-            <textarea name="description" id="description" required rows="3"
-                      placeholder="Describe this signature authority…"></textarea>
-        </div>
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea name="description" id="description" required rows="3"
+                          placeholder="Describe this signature authority…"></textarea>
+            </div>
 
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary" id="submit-btn">
-                Create Signature Authority
-            </button>
-            <a href="{% url 'index' %}" class="btn">Cancel</a>
-        </div>
-    </form>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary" id="submit-btn">
+                    Create Signature Authority
+                </button>
+                <a href="{% url 'index' %}" class="btn">Cancel</a>
+            </div>
+        </form>
+    {% endif %}
 </div>
 {% endblock %}
 

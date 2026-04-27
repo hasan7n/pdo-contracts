@@ -5,26 +5,35 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from .. import pdo_runner
-from ..models import Policy, PolicyTrustedAuthority, SignatureAuthority, User
+from ..models import CredentialTemplate, Policy, PolicyTemplate, PolicyTrustedAuthority, SignatureAuthority, User
 
 
 def create(request):
-    users = User.objects.all()
+    policy_templates = PolicyTemplate.objects.all()
 
     if request.method == 'POST':
-        user_id = request.POST.get('act_as')
         name = request.POST.get('name', '').strip()
         description = request.POST.get('description', '').strip()
         guardian_url = request.POST.get('guardian_url', '').strip()
         guardian_port_raw = request.POST.get('guardian_port', '').strip()
+        template_id = request.POST.get('template_id')
+
+        active_user_id = request.session.get('active_user_id')
+        if not active_user_id:
+            return render(request, 'policy_create.html', {
+                'policy_templates': policy_templates,
+                'error': 'No active user selected. Please choose a user in the navbar.',
+            })
 
         try:
             guardian_port = int(guardian_port_raw)
-            user = User.objects.get(pk=user_id)
+            user = User.objects.get(pk=active_user_id)
+            template = PolicyTemplate.objects.get(pk=template_id) if template_id else None
             pdo_runner.create_policy(name, user.name, description, guardian_url, guardian_port)
 
             policy = Policy.objects.create(
                 user=user,
+                template=template,
                 name=name,
                 description=description,
                 guardian_url=guardian_url,
@@ -37,9 +46,9 @@ def create(request):
         except Exception as e:
             error = str(e)
 
-        return render(request, 'policy_create.html', {'users': users, 'error': error})
+        return render(request, 'policy_create.html', {'policy_templates': policy_templates, 'error': error})
 
-    return render(request, 'policy_create.html', {'users': users})
+    return render(request, 'policy_create.html', {'policy_templates': policy_templates})
 
 
 def dashboard(request, pk):
@@ -51,8 +60,8 @@ def dashboard(request, pk):
     )
     context = {
         'policy': policy,
-        'users': User.objects.all(),
         'signature_authorities': SignatureAuthority.objects.all(),
+        'credential_templates': CredentialTemplate.objects.all(),
         'trusted_authorities': trusted_authorities,
         'policy_data_json': json.dumps(policy.policy_data, indent=2) if policy.policy_data else '',
     }

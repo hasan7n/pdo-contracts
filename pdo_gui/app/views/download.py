@@ -12,15 +12,20 @@ from ..models import Policy, User, VerifiableCredential
 @require_http_methods(['POST'])
 def download_data(request, pk):
     policy = get_object_or_404(Policy, pk=pk)
-    user_id = request.POST.get('user_id')
+
+    active_user_id = request.session.get('active_user_id')
+    if not active_user_id:
+        return JsonResponse(
+            {'success': False, 'error': 'No active user selected. Please choose a user in the navbar.'},
+            status=400,
+        )
 
     try:
-        user = User.objects.get(pk=user_id)
+        user = User.objects.get(pk=active_user_id)
     except User.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+        return JsonResponse({'success': False, 'error': 'Active user not found.'}, status=404)
 
     try:
-        # Combine the user's VCs keyed by the SA's signing_context
         vcs = VerifiableCredential.objects.filter(user=user).select_related('signature_authority')
         combined_vc = {vc.signature_authority.signing_context: vc.vc for vc in vcs}
 

@@ -19,8 +19,16 @@ class SignatureAuthority(models.Model):
         return self.name
 
 
+class PolicyTemplate(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Policy(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    template = models.ForeignKey('PolicyTemplate', null=True, blank=True, on_delete=models.SET_NULL)
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField()
     policy_data = models.JSONField(null=True, blank=True)

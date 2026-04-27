@@ -1,0 +1,10 @@
+{
+    "credential_templates": [
+        {"template_type": "membership", "claims_keys": ["member_of"]},
+        {"template_type": "consent",    "claims_keys": ["document"]},
+        {"template_type": "public_key", "claims_keys": ["key"]}
+    ],
+    "policy_templates": [
+        {"name": "download"}
+    ]
+}
