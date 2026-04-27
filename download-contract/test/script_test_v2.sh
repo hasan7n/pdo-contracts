@@ -14,20 +14,6 @@ TEST_ROOT=$(mktemp -d /tmp/test.XXXXXXXXX)
 cd "${SOURCE_ROOT}"
 
 # create any necessary contexts here
-try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
-    --bind identity membership_authority --bind user user1
-
-try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
-    --bind identity consent_authority --bind user user2
-
-try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
-    --bind identity public_key_authority --bind user user3
-
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.toml \
-    --bind identity simple_download --bind user user4
-
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
-    --bind token test1 --bind user user5 --bind url http://${F_GUARDIAN_HOST}:7900
 
 # -----------------------------------------------------------------
 # start the tests
@@ -37,6 +23,10 @@ try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
 
 ########### setup: membership_authority
 yell create a membership_authority and register signing context
+
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
+    --bind identity membership_authority --bind user user1
+
 try id_signature_authority create ${OPTS} --contract identity.membership_authority.signature_authority \
     -d 'Membership Authority: issues institution membership credentials'
 
@@ -46,6 +36,10 @@ try id_signature_authority register ${OPTS} --contract identity.membership_autho
 
 ########### setup: consent_authority
 yell create a consent_authority and register signing context
+
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
+    --bind identity consent_authority --bind user user2
+
 try id_signature_authority create ${OPTS} --contract identity.consent_authority.signature_authority \
     -d 'Consent Authority: issues consent credentials'
 
@@ -55,6 +49,10 @@ try id_signature_authority register ${OPTS} --contract identity.consent_authorit
 
 ########### setup: public_key_authority
 yell create a public_key_authority and register signing context
+
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
+    --bind identity public_key_authority --bind user user3
+
 try id_signature_authority create ${OPTS} --contract identity.public_key_authority.signature_authority \
     -d 'Public Key Authority: issues public key credentials'
 
@@ -62,9 +60,26 @@ try id_signature_authority register ${OPTS} --contract identity.public_key_autho
     -d 'fixed key satest' --fixed --path public_key
 
 
-########### setup: data_download policy agent
+########### setup: data_download policy agent and token
+
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.toml \
+    --bind identity simple_download --bind user user4
+
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
+    --bind token test1 --bind user user4 --bind url http://${F_GUARDIAN_HOST}:7900
+
 try download_policy create ${OPTS} --contract download.simple_download.policy_agent \
     -d 'data download policy agent: accepts membership, consent, and public key VCs.'
+
+yell create a token issuer and mint the tokens
+try ex_token_issuer create ${OPTS} --contract token.test1.token_issuer
+try download_token mint_tokens ${OPTS} --contract token.test1.token_object
+
+yell register a trusted VC issuer for token1
+try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
+    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type download
+
+########### setup: data_download policy agent configuration
 
 yell register issuer1 with the policy agent
 try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
@@ -83,17 +98,6 @@ try download_policy register ${OPTS} --contract download.simple_download.policy_
 yell configure the policy agent
 try download_policy set_policy ${OPTS} --contract download.simple_download.policy_agent \
     --data ${SCRIPTDIR}/policy_data.json
-
-
-########### setup: data download token
-
-yell create a token issuer and mint the tokens
-try ex_token_issuer create ${OPTS} --contract token.test1.token_issuer
-try download_token mint_tokens ${OPTS} --contract token.test1.token_object
-
-yell register a trusted VC issuer for token1
-try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
-    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type download
 
 ########### start
 yell generating user channel key
