@@ -301,6 +301,16 @@ bool ww::identity::Credential::deserialize(const ww::value::Object& serialized_o
     if (! ww::identity::Credential::verify_schema(serialized_object))
         return false;
 
+    // Required: type (list of strings, at least one element)
+    ww::value::Array type_array;
+    if (! serialized_object.get_value("type", type_array))
+        return false;
+    if (type_array.get_count() == 0)
+        return false;
+    // actually it's deserialize array
+    if (! deserialize_context_path(type_array, type_))
+        return false;
+
     ww::value::Object serialized_issuer;
     if (! serialized_object.get_value("issuer", serialized_issuer))
         return false;
@@ -344,6 +354,14 @@ bool ww::identity::Credential::deserialize(const ww::value::Object& serialized_o
 bool ww::identity::Credential::serialize(ww::value::Value& serialized_object) const
 {
     ww::value::Structure serializer(CREDENTIAL_SCHEMA);
+
+    // Required: type
+    ww::value::Array type_array;
+    // actually it's serialize array
+    if (! serialize_context_path(type_, type_array))
+        return false;
+    if (! serializer.set_value("type", type_array))
+        return false;
 
     ww::value::Value serialized_issuer;
     if (! issuer_.serialize(serialized_issuer))

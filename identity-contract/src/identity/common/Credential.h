@@ -201,6 +201,7 @@ namespace identity
 // Credential Schema
 //
 // Required fields include:
+//    type -- list of type identifiers for this credential; at least one string required
 //    issuer -- identifier for the issuer of the credential, should be
 //        verifiable by the signature in the proof section
 //    credentialSubject -- specifies a claim, while strictly speaking a
@@ -214,9 +215,9 @@ namespace identity
 //    nonce -- base64 encoded number that serves to protect against replay attacks
 //    issuanceDate -- data-time string, earliest time when claims are valid
 //    expirationDate -- date-time string when the credential will expire
-//    type -- list of type identifiers for type objects, VerifiableCredential is assumed
 #define CREDENTIAL_SCHEMA                               \
     "{"                                                 \
+        SCHEMA_KW(type, [ "" ]) ","                     \
         SCHEMA_KWS(issuer, IDENTITY_SCHEMA) ","         \
         SCHEMA_KWS(credentialSubject, CLAIMS_SCHEMA)    \
     "}"
@@ -229,6 +230,7 @@ namespace identity
     {
     private:
     public:
+        std::vector<std::string> type_;  // required, at least one element
         ww::identity::Identity issuer_;
         ww::identity::Claims credentialSubject_;
 

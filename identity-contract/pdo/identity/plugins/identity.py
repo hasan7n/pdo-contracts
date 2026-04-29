@@ -33,11 +33,15 @@ __all__ = [
     'op_describe_signing_context',
     'op_sign',
     'op_verify',
+    'op_add_vc',
+    'op_get_vp',
     'cmd_get_verifying_key',
     'cmd_register_signing_context',
     'cmd_sign',
     'cmd_verify',
     'cmd_create_identity',
+    'cmd_add_vc',
+    'cmd_get_vp',
     'do_identity',
     'do_identity_contract',
     'load_commands',
@@ -280,6 +284,57 @@ class op_verify(pcontract.contract_op_base) :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+class op_add_vc(pcontract.contract_op_base) :
+
+    name = "add_vc"
+    help = "Store a verifiable credential in the identity contract, indexed by its type"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-c', '--credential',
+            help='Verifiable credential to store (JSON)',
+            type=pbuilder.invocation_parameter,
+            required=True)
+
+    @classmethod
+    def invoke(cls, state, session_params, credential, **kwargs) :
+        session_params['commit'] = True
+
+        message = invocation_request('add_vc', credential=credential)
+        result = pcontract_cmd.send_to_contract(state, message, **session_params)
+        cls.log_invocation(message, result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class op_get_vp(pcontract.contract_op_base) :
+
+    name = "get_vp"
+    help = "Retrieve verifiable credentials for the given types"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-t', '--types',
+            help='List of credential types to retrieve',
+            type=str,
+            nargs='+',
+            required=True)
+
+    @classmethod
+    def invoke(cls, state, session_params, types, **kwargs) :
+        session_params['commit'] = False
+
+        message = invocation_request('get_vp', credential_types=types)
+        result = pcontract_cmd.send_to_contract(state, message, **session_params)
+        cls.log_invocation(message, result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 class cmd_get_verifying_key(pcommand.contract_command_base) :
     name = "get_verifying_key"
     help = "script to get the verifying key for a signing context"
@@ -511,6 +566,82 @@ class cmd_create_identity(pcommand.contract_command_base) :
         return save_file
 
 # -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class cmd_add_vc(pcommand.contract_command_base) :
+    name = "add_vc"
+    help = "Store a verifiable credential in the identity contract"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '--credential',
+            help='File containing the verifiable credential (JSON)',
+            dest='credential_file',
+            type=str,
+            required=True)
+
+    @classmethod
+    def invoke(cls, state, context, credential_file, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('identity contract must be created and initialized')
+
+        with open(credential_file, 'r') as fp :
+            credential = json.load(fp)
+
+        session = pbuilder.SessionParameters(save_file=save_file)
+        pcontract.invoke_contract_op(
+            op_add_vc, state, context, session,
+            credential=credential,
+            **kwargs)
+
+        cls.display('stored credential from {}'.format(credential_file))
+        return True
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class cmd_get_vp(pcommand.contract_command_base) :
+    name = "get_vp"
+    help = "Retrieve verifiable credentials for given types from the identity contract"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-t', '--types',
+            help='Credential types to retrieve',
+            type=str,
+            nargs='+',
+            required=True)
+        subparser.add_argument(
+            '-f', '--file',
+            help='File to save the resulting list of VCs (JSON)',
+            dest='output_file',
+            type=str,
+            required=False)
+
+    @classmethod
+    def invoke(cls, state, context, types, output_file, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('identity contract must be created and initialized')
+
+        session = pbuilder.SessionParameters(save_file=save_file)
+        result = pcontract.invoke_contract_op(
+            op_get_vp, state, context, session,
+            types=types,
+            **kwargs)
+
+        if output_file :
+            with open(output_file, 'w') as fp :
+                fp.write(result)
+            cls.display('saved credentials to {}'.format(output_file))
+        else :
+            cls.display(result)
+
+        return result
+
+
+# -----------------------------------------------------------------
 # Create the generic, shell independent version of the aggregate command
 # -----------------------------------------------------------------
 __operations__ = [
@@ -521,6 +652,8 @@ __operations__ = [
     op_describe_signing_context,
     op_sign,
     op_verify,
+    op_add_vc,
+    op_get_vp,
 ]
 
 do_identity_contract = pcontract.create_shell_command('identity_contract', __operations__)
@@ -531,6 +664,8 @@ __commands__ = [
     cmd_sign,
     cmd_verify,
     cmd_create_identity,
+    cmd_add_vc,
+    cmd_get_vp,
 ]
 
 do_identity = pcommand.create_shell_command('identity', __commands__)

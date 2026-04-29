@@ -39,28 +39,24 @@
 
 static KeyValueStore trusted_issuer_store("issuer_store");
 static KeyValueStore policy_metadata_store("policy_metadata_store");
-// TODO: multiple credential types by same issuer?
-static KeyValueStore issuer_type_mapping("issuer_type_mapping");
 
 const std::string md_issuer_path("issuer_path");
 const std::string md_policy_data("policy_data");
+const std::string md_issuer_type_map("issuer_type_map");
 const std::string initial_issuer_path("__ISSUER__");
 const std::string initial_policy_data("{}");
 
 // -----------------------------------------------------------------
-// UTILITY
+// UTILITY: read the issuer_type_map JSON dict from policy_metadata_store
 // -----------------------------------------------------------------
-static const char *get_expected_vc_list_schema(const std::map<std::string, const char *> &claims_schema_map)
+static bool get_issuer_type_mapping(ww::value::Object &type_map)
 {
-    ww::value::Object schema;
-    ww::value::Object vc_schema;
-    vc_schema.deserialize(VERIFIABLE_CREDENTIAL_SCHEMA);
-    for (const auto &pair : claims_schema_map)
-    {
-        schema.set_value(pair.first.c_str(), vc_schema);
-    }
-
-    return schema.serialize();
+    std::string type_map_str;
+    ERROR_IF_NOT(policy_metadata_store.get(md_issuer_type_map, type_map_str),
+                 "unexpected error, failed to fetch issuer type map");
+    ERROR_IF_NOT(type_map.deserialize(type_map_str.c_str()),
+                 "unexpected error, failed to deserialize issuer type map");
+    return true;
 }
 
 // -----------------------------------------------------------------
@@ -80,11 +76,25 @@ bool ww::identity::policy_agent::save_trusted_issuer(
     ERROR_IF_NOT(trusted_issuer.serialize(trusted_issuer_str),
                  "unexpected error, failed to serialize trusted issuer");
 
-    // TODO: atomic store of both the trusted issuer and its type?
-    ERROR_IF_NOT(issuer_type_mapping.set(issuer_id, credential_type),
-                 "unexpected error, failed to save issuer type mapping");
+    ERROR_IF_NOT(trusted_issuer_store.set(issuer_id, trusted_issuer_str),
+                 "unexpected error, failed to save trusted issuer");
 
-    return trusted_issuer_store.set(issuer_id, trusted_issuer_str);
+    // update issuer_type_map stored as a JSON dict in policy_metadata_store
+    ww::value::Object type_map;
+    ERROR_IF_NOT(get_issuer_type_mapping(type_map),
+                 "unexpected error, failed to load issuer type map");
+
+    ERROR_IF_NOT(type_map.set_string(issuer_id.c_str(), credential_type.c_str()),
+                 "unexpected error, failed to update issuer type map");
+
+    std::string type_map_str;
+    ERROR_IF_NOT(type_map.serialize(type_map_str),
+                 "unexpected error, failed to serialize issuer type map");
+
+    ERROR_IF_NOT(policy_metadata_store.set(md_issuer_type_map, type_map_str),
+                 "unexpected error, failed to save issuer type map");
+
+    return true;
 }
 
 // -----------------------------------------------------------------
@@ -100,11 +110,15 @@ bool ww::identity::policy_agent::fetch_trusted_issuer(
     ERROR_IF_NOT(trusted_issuer_store.get(issuer_id, trusted_issuer_str),
                  "unexpected error, failed to fetch trusted issuer");
 
-    // verify issuer type
-    std::string stored_credential_type;
-    ERROR_IF_NOT(issuer_type_mapping.get(issuer_id, stored_credential_type),
-                 "unexpected error, failed to fetch issuer type mapping");
-    ERROR_IF_NOT(stored_credential_type == credential_type,
+    // verify issuer type from the type map
+    ww::value::Object type_map;
+    ERROR_IF_NOT(get_issuer_type_mapping(type_map),
+                 "unexpected error, failed to load issuer type map");
+
+    const char *stored_credential_type_ptr = type_map.get_string(issuer_id.c_str());
+    ERROR_IF_NOT(stored_credential_type_ptr != nullptr,
+                 "invalid request, issuer not found in type map");
+    ERROR_IF_NOT(std::string(stored_credential_type_ptr) == credential_type,
                  "invalid request, credential type does not match the trusted issuer type");
 
     ww::value::Object trusted_issuer;
@@ -237,6 +251,10 @@ bool ww::identity::policy_agent::initialize_contract(const Environment &env)
     if (!policy_metadata_store.set(md_policy_data, initial_policy_data))
         return false;
 
+    // set an empty issuer type map
+    if (!policy_metadata_store.set(md_issuer_type_map, "{}"))
+        return false;
+
     return true;
 }
 
@@ -294,49 +312,66 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message &msg, con
 
 // -----------------------------------------------------------------
 // METHOD: issue_policy_credential
-//   Verify the incoming credential, process the policy decision and emit a new credential
+//   Verify credentials in the incoming verifiable presentation,
+//   process the policy decision and emit a new credential.
+//   Each VC's credential type is taken from the first element of its type list.
 //
 // JSON PARAMETERS:
 //   POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA
 // RETURNS:
-//   true signature is verified
+//   VERIFIABLE_CREDENTIAL_SCHEMA
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);
 
-    const std::map<std::string, const char *> claims_schema_map = get_claims_schemas();
-    const char *issue_policy_credential_param_schema = get_expected_vc_list_schema(claims_schema_map);
-
-    ASSERT_SUCCESS(rsp, msg.validate_schema(issue_policy_credential_param_schema),
+    ASSERT_SUCCESS(rsp, msg.validate_schema(POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA),
                    "invalid request, missing required parameters");
 
+    // deserialize the verifiable presentation
+    ww::value::Object vp_object;
+    ASSERT_SUCCESS(rsp, msg.get_value("presentation", vp_object),
+                   "invalid request, missing presentation");
+
+    ww::identity::VerifiablePresentation vp;
+    ASSERT_SUCCESS(rsp, vp.deserialize(vp_object),
+                   "invalid request, ill-formed verifiable presentation");
+
+    const std::map<std::string, const char *> claims_schema_map = get_claims_schemas();
     std::map<std::string, ww::identity::Credential> credentials;
 
-    for (const auto &[credential_type, claims_schema] : claims_schema_map)
+    for (size_t i = 0; i < vp.presentation_.verifiableCredential_.size(); i++)
     {
-
-        // get credential object
+        // re-serialize so verify_credential can re-deserialize and check signature
         ww::value::Object vc_object;
-        ASSERT_SUCCESS(rsp, msg.get_value(credential_type.c_str(), vc_object),
-                       ("missing required parameter; " + credential_type).c_str());
+        ASSERT_SUCCESS(rsp, vp.presentation_.verifiableCredential_[i].serialize(vc_object),
+                       "unexpected error, failed to serialize credential from presentation");
 
-        // Verify the credential
         ww::identity::VerifiableCredential vc;
-        ASSERT_SUCCESS(rsp, verify_credential(vc_object, vc, credential_type),
-                       ("invalid request, ill-formed credential for " + credential_type).c_str());
+        ASSERT_SUCCESS(rsp, !vp.presentation_.verifiableCredential_[i].credential_.type_.empty(),
+                       "invalid request, credential missing type list");
 
-        // Verify claims
-        ASSERT_SUCCESS(rsp, vc.credential_.credentialSubject_.claims_.validate_schema(claims_schema),
+        const std::string credential_type = vp.presentation_.verifiableCredential_[i].credential_.type_[0];
+
+        // verify against the trusted issuer for this type
+        ASSERT_SUCCESS(rsp, verify_credential(vc_object, vc, credential_type),
+                       ("invalid request, ill-formed credential for type: " + credential_type).c_str());
+
+        // verify claims schema if this type is expected
+        auto it = claims_schema_map.find(credential_type);
+        ASSERT_SUCCESS(rsp, it != claims_schema_map.end(),
+                       ("invalid request, unexpected credential type: " + credential_type).c_str());
+
+        ASSERT_SUCCESS(rsp, vc.credential_.credentialSubject_.claims_.validate_schema(it->second),
                        ("invalid claims for " + credential_type).c_str());
 
-        // store credential
+        // store credential by type
         ww::value::Object tmp;
         ASSERT_SUCCESS(rsp, vc.credential_.serialize(tmp),
-                       ("Unexpected error when serializng credential " + credential_type).c_str());
+                       ("unexpected error when serializing credential " + credential_type).c_str());
 
         ASSERT_SUCCESS(rsp, credentials[credential_type].deserialize(tmp),
-                       ("Unexpected error when storing credential " + credential_type).c_str());
+                       ("unexpected error when storing credential " + credential_type).c_str());
     }
 
     // get the policy data
@@ -398,4 +433,76 @@ bool ww::identity::policy_agent::set_policy_data(const Message &msg, const Envir
     ASSERT_SUCCESS(rsp, policy_metadata_store.set(md_policy_data, serialized_policy_data), "failed to save policy data");
 
     return rsp.success(true);
+}
+
+// -----------------------------------------------------------------
+// METHOD: get_policy_data
+//   Return the current policy data object.
+//
+// JSON PARAMETERS:
+//   none
+// RETURNS:
+//   policy data object
+// -----------------------------------------------------------------
+bool ww::identity::policy_agent::get_policy_data(const Message &msg, const Environment &env, Response &rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    std::string policy_data_str;
+    ASSERT_SUCCESS(rsp, policy_metadata_store.get(md_policy_data, policy_data_str),
+                   "unexpected error, failed to fetch policy data");
+
+    ww::value::Object policy_data;
+    ASSERT_SUCCESS(rsp, policy_data.deserialize(policy_data_str.c_str()),
+                   "unexpected error, failed to deserialize policy data");
+
+    return rsp.value(policy_data, false);
+}
+
+// -----------------------------------------------------------------
+// METHOD: list_trusted_issuers
+//   Return a dictionary mapping issuer ID to credential type for all
+//   registered trusted issuers.
+//
+// JSON PARAMETERS:
+//   none
+// RETURNS:
+//   object mapping issuer_id -> credential_type
+// -----------------------------------------------------------------
+bool ww::identity::policy_agent::list_trusted_issuers(const Message &msg, const Environment &env, Response &rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ww::value::Object type_map;
+    ASSERT_SUCCESS(rsp, get_issuer_type_mapping(type_map),
+                   "unexpected error, failed to load issuer type map");
+
+    return rsp.value(type_map, false);
+}
+
+// -----------------------------------------------------------------
+// METHOD: get_requirements
+//   Return the list of credential types required by this policy agent.
+//
+// JSON PARAMETERS:
+//   none
+// RETURNS:
+//   array of credential type strings
+// -----------------------------------------------------------------
+bool ww::identity::policy_agent::get_requirements(const Message &msg, const Environment &env, Response &rsp)
+{
+    ASSERT_INITIALIZED(rsp);
+
+    const std::map<std::string, const char *> claims_schema_map = get_claims_schemas();
+
+    ww::value::Array requirements;
+    for (const auto &[credential_type, schema] : claims_schema_map)
+    {
+        ASSERT_SUCCESS(rsp, requirements.append_string(credential_type.c_str()),
+                       "unexpected error, failed to build requirements list");
+    }
+
+    return rsp.value(requirements, false);
 }

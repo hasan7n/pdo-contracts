@@ -21,6 +21,7 @@
 #include "Message.h"
 #include "Response.h"
 
+#include "identity/common/Credential.h"
 #include "identity/common/SigningContextManager.h"
 
 #define IDENTITY_INITIALIZE_PARAM_SCHEMA        \
@@ -88,6 +89,16 @@
         SCHEMA_KW(chain_code, "")                               \
     "}"
 
+#define IDENTITY_ADD_VC_PARAM_SCHEMA                                    \
+    "{"                                                                 \
+        SCHEMA_KWS(credential, VERIFIABLE_CREDENTIAL_SCHEMA)            \
+    "}"
+
+#define IDENTITY_GET_VP_PARAM_SCHEMA                    \
+    "{"                                                 \
+        SCHEMA_KW(credential_types, [ "" ])             \
+    "}"
+
 namespace ww
 {
 namespace identity
@@ -102,6 +113,8 @@ namespace identity
     bool verify(const Message& msg, const Environment& env, Response& rsp);
     bool get_verifying_key(const Message& msg, const Environment& env, Response& rsp);
     bool get_extended_verifying_key(const Message& msg, const Environment& env, Response& rsp);
+    bool add_vc(const Message& msg, const Environment& env, Response& rsp);
+    bool get_vp(const Message& msg, const Environment& env, Response& rsp);
 
     bool get_context_path(const Message& msg, std::vector<std::string>& context_path, size_t minimum_size = 1);
     ww::identity::SigningContextManager get_context_manager(void);

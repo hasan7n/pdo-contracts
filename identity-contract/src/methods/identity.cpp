@@ -31,11 +31,13 @@
 
 #include "contract/base.h"
 #include "identity/identity.h"
+#include "identity/common/Credential.h"
 #include "identity/common/SigningContext.h"
 #include "identity/common/SigningContextManager.h"
 
 static KeyValueStore identity_metadata_store("key_store");
 static KeyValueStore signing_context_store("signing_context");
+static KeyValueStore vc_store("vc_store");
 
 static const std::string md_description("description");
 
@@ -416,4 +418,92 @@ bool ww::identity::identity::get_extended_verifying_key(const Message& msg, cons
                    "unexpected error, failed to set chain code");
 
     return rsp.value(result, false);
+}
+
+// -----------------------------------------------------------------
+// METHOD: add_vc
+//   Store a verifiable credential in the identity's VC store,
+//   indexed by the first element of its type list.
+//
+// JSON PARAMETERS:
+//   IDENTITY_ADD_VC_PARAM_SCHEMA
+// RETURNS:
+//   true on success
+// -----------------------------------------------------------------
+bool ww::identity::identity::add_vc(const Message& msg, const Environment& env, Response& rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ASSERT_SUCCESS(rsp, msg.validate_schema(IDENTITY_ADD_VC_PARAM_SCHEMA),
+                   "invalid request, missing required parameters");
+
+    ww::value::Object vc_object;
+    ASSERT_SUCCESS(rsp, msg.get_value("credential", vc_object),
+                   "invalid request, missing credential");
+
+    ww::identity::VerifiableCredential vc;
+    ASSERT_SUCCESS(rsp, vc.deserialize(vc_object),
+                   "invalid request, ill-formed verifiable credential");
+
+    ASSERT_SUCCESS(rsp, !vc.credential_.type_.empty(),
+                   "invalid request, credential type list is empty");
+
+    const std::string credential_type = vc.credential_.type_[0];
+
+    ww::value::Object serialized_vc;
+    ASSERT_SUCCESS(rsp, vc.serialize(serialized_vc),
+                   "unexpected error, failed to serialize credential");
+
+    std::string vc_str;
+    ASSERT_SUCCESS(rsp, serialized_vc.serialize(vc_str),
+                   "unexpected error, failed to serialize credential to string");
+
+    ASSERT_SUCCESS(rsp, vc_store.set(credential_type, vc_str),
+                   "unexpected error, failed to store credential");
+
+    return rsp.success(true);
+}
+
+// -----------------------------------------------------------------
+// METHOD: get_vp
+//   Retrieve a list of verifiable credentials for the given types.
+//
+// JSON PARAMETERS:
+//   IDENTITY_GET_VP_PARAM_SCHEMA
+// RETURNS:
+//   array of VERIFIABLE_CREDENTIAL_SCHEMA objects
+// -----------------------------------------------------------------
+bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, Response& rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ASSERT_SUCCESS(rsp, msg.validate_schema(IDENTITY_GET_VP_PARAM_SCHEMA),
+                   "invalid request, missing required parameters");
+
+    ww::value::Array types_array;
+    ASSERT_SUCCESS(rsp, msg.get_value("credential_types", types_array),
+                   "invalid request, missing credential_types");
+
+    ww::value::Array result_list;
+    const size_t count = types_array.get_count();
+
+    for (size_t i = 0; i < count; i++)
+    {
+        const std::string credential_type(types_array.get_string(i));
+
+        std::string vc_str;
+        ASSERT_SUCCESS(rsp, vc_store.get(credential_type, vc_str),
+                       ("invalid request, no credential stored for type: " + credential_type).c_str());
+
+        ww::value::Object vc_object;
+        ASSERT_SUCCESS(rsp, vc_object.deserialize(vc_str.c_str()),
+                       "unexpected error, failed to deserialize stored credential");
+
+        ASSERT_SUCCESS(rsp, result_list.append_value(vc_object),
+                       "unexpected error, failed to build result list");
+    }
+
+    return rsp.value(result_list, false);
 }

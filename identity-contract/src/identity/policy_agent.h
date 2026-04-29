@@ -36,6 +36,10 @@
         SCHEMA_KW(chain_code, "")                       \
     "}"
 
+#define POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_PARAM_SCHEMA       \
+    "{"                                                          \
+        SCHEMA_KWS(presentation, VERIFIABLE_PRESENTATION_SCHEMA) \
+    "}"
 
 #define POLICY_AGENT_ISSUE_POLICY_CREDENTIAL_RESULT_SCHEMA      \
     VERIFIABLE_CREDENTIAL_SCHEMA
@@ -51,6 +55,9 @@ namespace policy_agent
     bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);
     bool register_trusted_issuer(const Message& msg, const Environment& env, Response& rsp);
     bool set_policy_data(const Message& msg, const Environment& env, Response& rsp);
+    bool get_policy_data(const Message& msg, const Environment& env, Response& rsp);
+    bool list_trusted_issuers(const Message& msg, const Environment& env, Response& rsp);
+    bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
 
     // Functions to extend the functionality of the policy agent
     bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const std::string& credential_type);
