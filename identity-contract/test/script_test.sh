@@ -148,6 +148,9 @@ rm -f ${F_CONTEXT_FILE}
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/identity.toml \
     --bind identity idtest --bind user user1
 
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/identity.toml \
+    --bind identity idtest2 --bind user user1
+
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/signature_authority.toml \
     --bind identity satest --bind user user2
 
@@ -162,9 +165,11 @@ try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/committee.toml
 # -----------------------------------------------------------------
 
 # =================================================================
-yell create an identity contract
+yell create a identity contracts
 try id_wallet create ${OPTS} --contract identity.idtest.wallet   \
     -d 'idtest identity'
+try id_wallet create ${OPTS} --contract identity.idtest2.wallet   \
+    -d 'idtest2 identity'
 
 yell register keys and retrieve them
 try id_wallet register ${OPTS} --contract identity.idtest.wallet \
@@ -242,6 +247,13 @@ say $(< ${TEST_ROOT}/sa_credential2.json)
 try id_signature_authority verify_credential ${OPTS} --contract identity.satest.signature_authority \
     --signed-credential ${TEST_ROOT}/sa_credential2.json
 
+yell add VCs to the identity contracts
+try id_wallet add_vc ${OPTS} --contract identity.idtest.wallet \
+    --credential ${TEST_ROOT}/sa_credential1.json
+
+try id_wallet add_vc ${OPTS} --contract identity.idtest2.wallet \
+    --credential ${TEST_ROOT}/sa_credential2.json
+
 # =================================================================
 yell create a policy agent
 try id_policy_agent create ${OPTS} --contract identity.patest.policy_agent \
@@ -252,9 +264,11 @@ try id_policy_agent register ${OPTS} --contract identity.patest.policy_agent \
     --issuer identity.satest.signature_authority --path satest ext1 --credential-type dummy
 
 yell issue a simple credential
-(echo '{"dummy":' && cat ${TEST_ROOT}/sa_credential1.json && echo '}') > ${TEST_ROOT}/sa_credential1_prepared.json
+try id_wallet get_vp ${OPTS} --contract identity.idtest.wallet \
+    --types dummy --file ${TEST_ROOT}/vp1.json
+
 try id_policy_agent issue_credential ${OPTS} --contract identity.patest.policy_agent \
-    --signed-credential ${TEST_ROOT}/sa_credential1_prepared.json --issued-credential ${TEST_ROOT}/pa_credential1.json
+    --presentation ${TEST_ROOT}/vp1.json --issued-credential ${TEST_ROOT}/pa_credential1.json
 
 say issued credential is:
 say $(<${TEST_ROOT}/pa_credential1.json)
@@ -263,9 +277,11 @@ try id_policy_agent verify_credential ${OPTS} --contract identity.patest.policy_
     --signed-credential ${TEST_ROOT}/pa_credential1.json
 
 yell issue a complex credential
-(echo '{"dummy":' && cat ${TEST_ROOT}/sa_credential2.json && echo '}') > ${TEST_ROOT}/sa_credential2_prepared.json
+try id_wallet get_vp ${OPTS} --contract identity.idtest2.wallet \
+    --types dummy --file ${TEST_ROOT}/vp2.json
+
 try id_policy_agent issue_credential ${OPTS} --contract identity.patest.policy_agent \
-    --signed-credential ${TEST_ROOT}/sa_credential2_prepared.json --issued-credential ${TEST_ROOT}/pa_credential2.json
+    --presentation ${TEST_ROOT}/vp2.json --issued-credential ${TEST_ROOT}/pa_credential2.json
 
 say issued verifiable credential is:
 say $(<${TEST_ROOT}/pa_credential2.json)
@@ -275,6 +291,14 @@ try id_credential extract --signed-credential ${TEST_ROOT}/pa_credential2.json
 
 try id_policy_agent verify_credential ${OPTS} --contract identity.patest.policy_agent \
     --signed-credential ${TEST_ROOT}/pa_credential2.json
+
+yell test policy agent public info endpoints
+say policy data:
+try id_policy_agent get_policy ${OPTS} --contract identity.patest.policy_agent
+say issuers list:
+try id_policy_agent list_issuers ${OPTS} --contract identity.patest.policy_agent
+say requirements:
+try id_policy_agent get_requirements ${OPTS} --contract identity.patest.policy_agent
 
 # =================================================================
 yell create a committee
