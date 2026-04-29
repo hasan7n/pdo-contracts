@@ -362,6 +362,11 @@ namespace identity
 
         bool deserialize(const ww::value::Object& verifiable_credential);
         bool serialize(ww::value::Value& serialized_verifiable_credential) const;
+
+        bool build(
+            const ww::value::Object& presentation,
+            const ww::identity::IdentityKey& identity,
+            const ww::identity::BaseSigningContext& signing_context);
     };
 }
 }

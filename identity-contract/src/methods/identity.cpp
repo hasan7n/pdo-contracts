@@ -40,6 +40,7 @@ static KeyValueStore signing_context_store("signing_context");
 static KeyValueStore vc_store("vc_store");
 
 static const std::string md_description("description");
+static const std::string initial_holder_path("__HOLDER__");
 
 // -----------------------------------------------------------------
 // FUNCTION: get_context_manager
@@ -99,6 +100,12 @@ bool ww::identity::identity::initialize_contract(const Environment& env)
     // ---------- prime signing context store ----------
     ww::identity::SigningContextManager manager(signing_context_store);
     if (! manager.initialize())
+        return false;
+
+    // ---------- prime the holder signing context ----------
+    // extensible so that per-originator sub-paths can be derived at get_vp time
+    std::vector<std::string> holder_path = {initial_holder_path};
+    if (! manager.add_context(true, "holder signing context", holder_path))
         return false;
 
     // ---------- other metadata ----------
@@ -467,12 +474,13 @@ bool ww::identity::identity::add_vc(const Message& msg, const Environment& env, 
 
 // -----------------------------------------------------------------
 // METHOD: get_vp
-//   Retrieve a list of verifiable credentials for the given types.
+//   Retrieve stored verifiable credentials for the given types and
+//   wrap them in a signed VerifiablePresentation.
 //
 // JSON PARAMETERS:
 //   IDENTITY_GET_VP_PARAM_SCHEMA
 // RETURNS:
-//   array of VERIFIABLE_CREDENTIAL_SCHEMA objects
+//   VERIFIABLE_PRESENTATION_SCHEMA
 // -----------------------------------------------------------------
 bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, Response& rsp)
 {
@@ -486,7 +494,8 @@ bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, 
     ASSERT_SUCCESS(rsp, msg.get_value("credential_types", types_array),
                    "invalid request, missing credential_types");
 
-    ww::value::Array result_list;
+    // collect the stored VCs
+    ww::value::Array vc_list;
     const size_t count = types_array.get_count();
 
     for (size_t i = 0; i < count; i++)
@@ -501,9 +510,57 @@ bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, 
         ASSERT_SUCCESS(rsp, vc_object.deserialize(vc_str.c_str()),
                        "unexpected error, failed to deserialize stored credential");
 
-        ASSERT_SUCCESS(rsp, result_list.append_value(vc_object),
-                       "unexpected error, failed to build result list");
+        ASSERT_SUCCESS(rsp, vc_list.append_value(vc_object),
+                       "unexpected error, failed to build VC list");
     }
 
-    return rsp.value(result_list, false);
+    // build the Presentation object
+    ww::identity::Identity holder;
+    holder.id_ = env.contract_id_;
+
+    ww::value::Value serialized_holder;
+    ASSERT_SUCCESS(rsp, holder.serialize(serialized_holder),
+                   "unexpected error, failed to serialize holder identity");
+
+    ww::value::Structure presentation_obj(PRESENTATION_SCHEMA);
+    ASSERT_SUCCESS(rsp, presentation_obj.set_value("holder", serialized_holder),
+                   "unexpected error, failed to set holder in presentation");
+    ASSERT_SUCCESS(rsp, presentation_obj.set_value("verifiableCredential", vc_list),
+                   "unexpected error, failed to set credentials in presentation");
+
+    // derive a per-originator signing context from the __HOLDER__ root
+    ww::types::ByteArray originator_bytes(env.originator_id_.begin(), env.originator_id_.end());
+    ww::types::ByteArray originator_hash;
+    ASSERT_SUCCESS(rsp, ww::crypto::hash::sha256_hash(originator_bytes, originator_hash),
+                   "unexpected error, failed to hash originator");
+
+    std::string encoded_originator;
+    ASSERT_SUCCESS(rsp, ww::crypto::b64_encode(originator_hash, encoded_originator),
+                   "unexpected error, failed to encode originator");
+
+    // TODO: this doesn't make sense; the originator is always the contract owner.
+    // perhaps later if we try to mimic the OID4VP, the context path will include the
+    // releying party ID
+    std::vector<std::string> context_path = {initial_holder_path, encoded_originator};
+    ww::identity::SigningContext context;
+    std::vector<std::string> extended_path;
+
+    ww::identity::SigningContextManager manager = ww::identity::identity::get_context_manager();
+    ASSERT_SUCCESS(rsp, manager.find_context(context_path, extended_path, context),
+                   "unexpected error, failed to locate holder signing context");
+
+    context.set_context_path(extended_path);
+
+    const ww::identity::IdentityKey identity(env.contract_id_, context_path);
+
+    // build and sign the VP
+    ww::identity::VerifiablePresentation vp;
+    ASSERT_SUCCESS(rsp, vp.build(presentation_obj, identity, context),
+                   "unexpected error, failed to build verifiable presentation");
+
+    ww::value::Object serialized_vp;
+    ASSERT_SUCCESS(rsp, vp.serialize(serialized_vp),
+                   "unexpected error, failed to serialize verifiable presentation");
+
+    return rsp.value(serialized_vp, false);
 }

@@ -312,7 +312,7 @@ class op_add_vc(pcontract.contract_op_base) :
 class op_get_vp(pcontract.contract_op_base) :
 
     name = "get_vp"
-    help = "Retrieve verifiable credentials for the given types"
+    help = "Retrieve a verifiable presentation for given types"
 
     @classmethod
     def add_arguments(cls, subparser) :
@@ -602,7 +602,7 @@ class cmd_add_vc(pcommand.contract_command_base) :
 # -----------------------------------------------------------------
 class cmd_get_vp(pcommand.contract_command_base) :
     name = "get_vp"
-    help = "Retrieve verifiable credentials for given types from the identity contract"
+    help = "Retrieve a verifiable presentation for given types"
 
     @classmethod
     def add_arguments(cls, subparser) :
@@ -614,7 +614,7 @@ class cmd_get_vp(pcommand.contract_command_base) :
             required=True)
         subparser.add_argument(
             '-f', '--file',
-            help='File to save the resulting list of VCs (JSON)',
+            help='File to save the resulting Verifiable Presentation (JSON)',
             dest='output_file',
             type=str,
             required=False)
@@ -634,7 +634,7 @@ class cmd_get_vp(pcommand.contract_command_base) :
         if output_file :
             with open(output_file, 'w') as fp :
                 fp.write(result)
-            cls.display('saved credentials to {}'.format(output_file))
+            cls.display('saved VP to {}'.format(output_file))
         else :
             cls.display(result)
 
