@@ -67,6 +67,7 @@ bool ww::identity::policy_agent::policy_agent_function(
     ww::identity::Credential dummy_credential = credentials.at("dummy");
     std::string subject = dummy_credential.credentialSubject_.subject_.id_;
     credential_out.credentialSubject_.subject_.id_ = subject;
+    credential_out.type_ = {"echo"};
 
     // -----------------------------------------------------------------
     // Write your logic here
