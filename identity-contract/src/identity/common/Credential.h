@@ -242,8 +242,15 @@ namespace identity
 
         static bool verify_schema(const ww::value::Object& deserialized_object)
         {
-            return ww::exchange::SerializeableObject::verify_schema_actual(
-                deserialized_object, CREDENTIAL_SCHEMA);
+            if (! ww::exchange::SerializeableObject::verify_schema_actual(
+                deserialized_object, CREDENTIAL_SCHEMA))
+            {
+                return false;
+            }
+            CONTRACT_SAFE_LOG(3, "credential schema verified, now checking 'type' field");
+            ww::value::Array object_type;
+            deserialized_object.get_value("type", object_type);
+            return object_type.get_count() > 0;
         }
 
         bool deserialize(const ww::value::Object& credential);
