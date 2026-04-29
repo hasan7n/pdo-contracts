@@ -625,6 +625,7 @@ bool ww::identity::VerifiablePresentation::serialize(ww::value::Value& serialize
     if (! serializer.set_value("proof", serialized_proof))
         return false;
 
+    serialized_object.set(serializer);
     return true;
 }
 

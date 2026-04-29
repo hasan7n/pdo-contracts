@@ -522,7 +522,7 @@ bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, 
     ASSERT_SUCCESS(rsp, holder.serialize(serialized_holder),
                    "unexpected error, failed to serialize holder identity");
 
-    ww::value::Structure presentation_obj(PRESENTATION_SCHEMA);
+    ww::value::Object presentation_obj;
     ASSERT_SUCCESS(rsp, presentation_obj.set_value("holder", serialized_holder),
                    "unexpected error, failed to set holder in presentation");
     ASSERT_SUCCESS(rsp, presentation_obj.set_value("verifiableCredential", vc_list),
