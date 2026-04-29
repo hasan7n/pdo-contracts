@@ -114,6 +114,7 @@ namespace identity
     bool get_verifying_key(const Message& msg, const Environment& env, Response& rsp);
     bool get_extended_verifying_key(const Message& msg, const Environment& env, Response& rsp);
     bool add_vc(const Message& msg, const Environment& env, Response& rsp);
+    bool get_vc_list(const Message& msg, const Environment& env, Response& rsp);
     bool get_vp(const Message& msg, const Environment& env, Response& rsp);
 
     bool get_context_path(const Message& msg, std::vector<std::string>& context_path, size_t minimum_size = 1);

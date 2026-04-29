@@ -37,10 +37,45 @@
 
 static KeyValueStore identity_metadata_store("key_store");
 static KeyValueStore signing_context_store("signing_context");
-static KeyValueStore vc_store("vc_store");
 
 static const std::string md_description("description");
+static const std::string md_vc_store("vc_store");
 static const std::string initial_holder_path("__HOLDER__");
+
+// -----------------------------------------------------------------
+// VC STORE HELPERS
+// -----------------------------------------------------------------
+static bool load_vc_map(ww::value::Object& vc_map)
+{
+    std::string str;
+    ERROR_IF_NOT(identity_metadata_store.get(md_vc_store, str),
+                 "unexpected error, failed to fetch vc store");
+    ERROR_IF_NOT(vc_map.deserialize(str.c_str()),
+                 "unexpected error, failed to deserialize vc store");
+    return true;
+}
+
+static bool save_vc_map(ww::value::Object& vc_map)
+{
+    std::string str;
+    ERROR_IF_NOT(vc_map.serialize(str),
+                 "unexpected error, failed to serialize vc store");
+    ERROR_IF_NOT(identity_metadata_store.set(md_vc_store, str),
+                 "unexpected error, failed to save vc store");
+    return true;
+}
+
+static bool store_vc(const std::string& credential_type, ww::value::Object& vc_object)
+{
+    ww::value::Object vc_map;
+    ERROR_IF_NOT(load_vc_map(vc_map),
+                 "unexpected error, failed to load vc map");
+    ERROR_IF_NOT(vc_map.set_value(credential_type.c_str(), vc_object),
+                 "unexpected error, failed to update vc map");
+    ERROR_IF_NOT(save_vc_map(vc_map),
+                 "unexpected error, failed to save vc map");
+    return true;
+}
 
 // -----------------------------------------------------------------
 // FUNCTION: get_context_manager
@@ -110,6 +145,9 @@ bool ww::identity::identity::initialize_contract(const Environment& env)
 
     // ---------- other metadata ----------
     if (! identity_metadata_store.set(md_description, "identity object"))
+        return false;
+
+    if (! identity_metadata_store.set(md_vc_store, "{}"))
         return false;
 
     return true;
@@ -462,14 +500,32 @@ bool ww::identity::identity::add_vc(const Message& msg, const Environment& env, 
     ASSERT_SUCCESS(rsp, vc.serialize(serialized_vc),
                    "unexpected error, failed to serialize credential");
 
-    std::string vc_str;
-    ASSERT_SUCCESS(rsp, serialized_vc.serialize(vc_str),
-                   "unexpected error, failed to serialize credential to string");
-
-    ASSERT_SUCCESS(rsp, vc_store.set(credential_type, vc_str),
+    ASSERT_SUCCESS(rsp, store_vc(credential_type, serialized_vc),
                    "unexpected error, failed to store credential");
 
     return rsp.success(true);
+}
+
+// -----------------------------------------------------------------
+// METHOD: get_vc_list
+//   Return all stored verifiable credentials as a dictionary mapping
+//   credential type to the VC object.
+//
+// JSON PARAMETERS:
+//   none
+// RETURNS:
+//   object mapping credential_type -> VC object
+// -----------------------------------------------------------------
+bool ww::identity::identity::get_vc_list(const Message& msg, const Environment& env, Response& rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ww::value::Object vc_map;
+    ASSERT_SUCCESS(rsp, load_vc_map(vc_map),
+                   "unexpected error, failed to load vc store");
+
+    return rsp.value(vc_map, false);
 }
 
 // -----------------------------------------------------------------
@@ -495,20 +551,19 @@ bool ww::identity::identity::get_vp(const Message& msg, const Environment& env, 
                    "invalid request, missing credential_types");
 
     // collect the stored VCs
+    ww::value::Object vc_map;
+    ASSERT_SUCCESS(rsp, load_vc_map(vc_map),
+                   "unexpected error, failed to load vc store");
+
     ww::value::Array vc_list;
     const size_t count = types_array.get_count();
-
     for (size_t i = 0; i < count; i++)
     {
         const std::string credential_type(types_array.get_string(i));
 
-        std::string vc_str;
-        ASSERT_SUCCESS(rsp, vc_store.get(credential_type, vc_str),
-                       ("invalid request, no credential stored for type: " + credential_type).c_str());
-
         ww::value::Object vc_object;
-        ASSERT_SUCCESS(rsp, vc_object.deserialize(vc_str.c_str()),
-                       "unexpected error, failed to deserialize stored credential");
+        ASSERT_SUCCESS(rsp, vc_map.get_value(credential_type.c_str(), vc_object),
+                       ("invalid request, no credential stored for type: " + credential_type).c_str());
 
         ASSERT_SUCCESS(rsp, vc_list.append_value(vc_object),
                        "unexpected error, failed to build VC list");
