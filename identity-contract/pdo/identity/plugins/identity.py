@@ -34,6 +34,7 @@ __all__ = [
     'op_sign',
     'op_verify',
     'op_add_vc',
+    'op_get_vc_list',
     'op_get_vp',
     'cmd_get_verifying_key',
     'cmd_register_signing_context',
@@ -41,6 +42,7 @@ __all__ = [
     'cmd_verify',
     'cmd_create_identity',
     'cmd_add_vc',
+    'cmd_get_vc_list',
     'cmd_get_vp',
     'do_identity',
     'do_identity_contract',
@@ -335,6 +337,27 @@ class op_get_vp(pcontract.contract_op_base) :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+class op_get_vc_list(pcontract.contract_op_base) :
+
+    name = "get_vc_list"
+    help = "Retrieve all stored verifiable credentials as a type-to-VC mapping"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        pass
+
+    @classmethod
+    def invoke(cls, state, session_params, **kwargs) :
+        session_params['commit'] = False
+
+        message = invocation_request('get_vc_list')
+        result = pcontract_cmd.send_to_contract(state, message, **session_params)
+        cls.log_invocation(message, result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 class cmd_get_verifying_key(pcommand.contract_command_base) :
     name = "get_verifying_key"
     help = "script to get the verifying key for a signing context"
@@ -600,6 +623,40 @@ class cmd_add_vc(pcommand.contract_command_base) :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+class cmd_get_vc_list(pcommand.contract_command_base) :
+    name = "get_vc_list"
+    help = "Retrieve all stored verifiable credentials as a type-to-VC mapping"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-f', '--file',
+            help='File to save the resulting VC map (JSON)',
+            dest='output_file',
+            type=str,
+            required=False)
+
+    @classmethod
+    def invoke(cls, state, context, output_file=None, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('identity contract must be created and initialized')
+
+        session = pbuilder.SessionParameters(save_file=save_file)
+        result = pcontract.invoke_contract_op(
+            op_get_vc_list, state, context, session, **kwargs)
+
+        if output_file :
+            with open(output_file, 'w') as fp :
+                fp.write(result)
+            cls.display('saved VC list to {}'.format(output_file))
+        else :
+            cls.display(result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 class cmd_get_vp(pcommand.contract_command_base) :
     name = "get_vp"
     help = "Retrieve a verifiable presentation for given types"
@@ -653,6 +710,7 @@ __operations__ = [
     op_sign,
     op_verify,
     op_add_vc,
+    op_get_vc_list,
     op_get_vp,
 ]
 
@@ -665,6 +723,7 @@ __commands__ = [
     cmd_verify,
     cmd_create_identity,
     cmd_add_vc,
+    cmd_get_vc_list,
     cmd_get_vp,
 ]
 
