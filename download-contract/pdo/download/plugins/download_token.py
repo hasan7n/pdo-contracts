@@ -65,10 +65,12 @@ op_release = token_object.op_release
 op_claim = token_object.op_claim
 op_initialize = token_object.op_initialize
 op_register_trusted_issuer = policy_agent.op_register_trusted_issuer
+op_list_trusted_issuers = policy_agent.op_list_trusted_issuers
 
 cmd_mint_tokens = token_object.cmd_mint_tokens
 cmd_transfer_assets = token_object.cmd_transfer_assets
 cmd_register_trusted_issuer = policy_agent.cmd_register_trusted_issuer
+cmd_list_trusted_issuers = policy_agent.cmd_list_trusted_issuers
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +172,7 @@ class cmd_do_download(pcommand.contract_command_base):
             session,
             vc=signed_credential_data,
             url=url,
-            **kwargs
+            **kwargs,
         )
         with open(output_file, "wb") as fp:
             fp.write(result)
@@ -195,6 +197,7 @@ __operations__ = [
     op_claim,
     op_do_download,
     op_register_trusted_issuer,
+    op_list_trusted_issuers,
 ]
 
 do_download_token_contract = pcontract.create_shell_command(
@@ -206,6 +209,7 @@ __commands__ = [
     cmd_transfer_assets,
     cmd_do_download,
     cmd_register_trusted_issuer,
+    cmd_list_trusted_issuers,
 ]
 
 do_download_token = pcommand.create_shell_command("download_token", __commands__)
