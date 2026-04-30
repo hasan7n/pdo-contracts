@@ -55,7 +55,7 @@ F_LOGFILE=${PDO_LOG_FILE:-__screen__}
 F_CONTEXT_FILE=${SOURCE_ROOT}/test/test_context.toml
 F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/download/context
 F_IDENTITY_TEMPLATES=${PDO_HOME}/contracts/identity/context
-F_PREFERRED=random
+F_PREFERRED=http://localhost:7101
 
 F_USAGE='--host service-host | --ledger url | --loglevel [debug|info|warn] | --logfile file | --preferred [host]'
 SHORT_OPTS='h:l:p:'
@@ -200,8 +200,10 @@ try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/policy_agent.t
     --bind identity simple_download --bind user user4
 
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/tokens.toml \
-    --bind token test1 --bind user user5 --bind url http://${F_GUARDIAN_HOST}:7900
+    --bind token test1 --bind user user4 --bind url http://${F_GUARDIAN_HOST}:7900
 
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/identity.toml \
+    --bind identity downloader --bind user user5
 
 
 # -----------------------------------------------------------------
@@ -268,7 +270,13 @@ try download_token mint_tokens ${OPTS} --contract token.test1.token_object
 
 yell register a trusted VC issuer for token1
 try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
-    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type download
+    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type DownloadCredential
+
+########### setup: downloader wallet
+
+yell create an identity contract
+try id_wallet create ${OPTS} --contract identity.downloader.wallet \
+    -d 'idtest identity'
 
 ########### start
 yell generating user channel key
@@ -286,22 +294,25 @@ yell sign public key credential
 try id_signature_authority sign_credential ${OPTS} --contract identity.public_key_authority.signature_authority \
     --path public_key --credential ${TEST_ROOT}/user_channel_key/credential_key.json --signed-credential ${TEST_ROOT}/public_key_vc.json
 
-yell combine credentials
-python3 ${SCRIPTDIR}/combine.py \
-    ${TEST_ROOT}/membership_vc.json \
-    ${TEST_ROOT}/consent_vc.json \
-    ${TEST_ROOT}/public_key_vc.json \
-    ${TEST_ROOT}/combined.json
+yell add credentials to wallet
+try id_wallet add_vc ${OPTS} --contract identity.downloader.wallet \
+    --credential ${TEST_ROOT}/membership_vc.json
+try id_wallet add_vc ${OPTS} --contract identity.downloader.wallet \
+    --credential ${TEST_ROOT}/consent_vc.json
+try id_wallet add_vc ${OPTS} --contract identity.downloader.wallet \
+    --credential ${TEST_ROOT}/public_key_vc.json
 
+yell generating a VP
+try id_wallet get_vp ${OPTS} --contract identity.downloader.wallet \
+    --types membership consent public_key --file ${TEST_ROOT}/vp.json
 
 yell issue a credential
 try download_policy issue_credential ${OPTS} --contract download.simple_download.policy_agent \
-    --signed-credential ${TEST_ROOT}/combined.json --issued-credential ${TEST_ROOT}/combined_vc.json
-
+    --presentation ${TEST_ROOT}/vp.json --issued-credential ${TEST_ROOT}/download_vc.json
 
 yell download data
 try download_token do_download ${OPTS}  --contract token.test1.token_object.token_1 \
-    --vc-file ${TEST_ROOT}/combined_vc.json \
+    --vc-file ${TEST_ROOT}/download_vc.json \
     --output-file ${TEST_ROOT}/encrypted_data.bin
 
 yell read data
@@ -311,5 +322,9 @@ python3 ${SCRIPTDIR}/read_data.py ${TEST_ROOT}/encrypted_data.bin \
 
 cat ${TEST_ROOT}/decrypted_data.txt
 echo
+
+########### other tests
+yell test some other endpoints
+try download_token list_issuers ${OPTS} --contract token.test1.token_object.token_1
 
 yell All tests passed

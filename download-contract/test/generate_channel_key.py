@@ -34,6 +34,7 @@ with open(os.path.join(out_dir, "public_key.pem"), "wb") as f:
     f.write(public_pem)
 
 cred = {
+    "type": ["public_key"],
     "issuer": {"id": "A6QBclbcAayAvw7BggM7iMz_Xa6NEn_YGT94mpkQmEk="},
     "credentialSubject": {
         "subject": {"id": "SMeYjWc5IOdvI3KJtPbx4WHlRvkdL5A__xcHayDj9+0="},

@@ -66,7 +66,7 @@ F_LOGFILE=${PDO_LOG_FILE:-__screen__}
 F_CONTEXT_FILE=${SOURCE_ROOT}/test/test_context.toml
 F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/download/context
 F_IDENTITY_TEMPLATES=${PDO_HOME}/contracts/identity/context
-F_PREFERRED=random
+F_PREFERRED=http://localhost:7101
 
 if [ ! -f ${F_SERVICE_SITE_FILE} ] ; then
     die unable to locate the service information file ${F_SERVICE_SITE_FILE}; \
