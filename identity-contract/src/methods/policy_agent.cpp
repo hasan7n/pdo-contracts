@@ -60,6 +60,17 @@ static bool get_issuer_type_mapping(ww::value::Object &type_map)
 }
 
 // -----------------------------------------------------------------
+// FUNCTION: initialize_issuer_type_map
+// -----------------------------------------------------------------
+bool ww::identity::policy_agent::initialize_issuer_type_map()
+{
+    // set an empty issuer type map
+    ERROR_IF_NOT(policy_metadata_store.set(md_issuer_type_map, "{}"),
+                 "unexpected error, failed to initialize empty issuer type map");
+    return true;
+}
+
+// -----------------------------------------------------------------
 // FUNCTION: save_trusted_issuer
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::save_trusted_issuer(
@@ -251,8 +262,8 @@ bool ww::identity::policy_agent::initialize_contract(const Environment &env)
     if (!policy_metadata_store.set(md_policy_data, initial_policy_data))
         return false;
 
-    // set an empty issuer type map
-    if (!policy_metadata_store.set(md_issuer_type_map, "{}"))
+    // initialize an empty issuer type map
+    if (!initialize_issuer_type_map())
         return false;
 
     return true;
@@ -395,6 +406,7 @@ bool ww::identity::policy_agent::issue_policy_credential(const Message &msg, con
     CONTRACT_SAFE_LOG(3, "prepare to evaluate the policy");
     ASSERT_SUCCESS(rsp, policy_agent_function(credentials, policy_data_object, credential_out),
                    "policy failed");
+    CONTRACT_SAFE_LOG(3, "finished evaluating the policy");
 
     credential_out.issuer_.id_ = env.contract_id_;
 
@@ -446,7 +458,6 @@ bool ww::identity::policy_agent::set_policy_data(const Message &msg, const Envir
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::get_policy_data(const Message &msg, const Environment &env, Response &rsp)
 {
-    ASSERT_SENDER_IS_OWNER(env, rsp);
     ASSERT_INITIALIZED(rsp);
 
     std::string policy_data_str;
@@ -472,7 +483,6 @@ bool ww::identity::policy_agent::get_policy_data(const Message &msg, const Envir
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::list_trusted_issuers(const Message &msg, const Environment &env, Response &rsp)
 {
-    ASSERT_SENDER_IS_OWNER(env, rsp);
     ASSERT_INITIALIZED(rsp);
 
     ww::value::Object type_map;

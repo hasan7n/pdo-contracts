@@ -48,7 +48,7 @@ bool ww::download::download_token::do_download(
     ASSERT_SUCCESS(rsp, msg.get_value("download_vc", vc_object_in), "missing required parameter; download_vc");
 
     ww::identity::VerifiableCredential vc_in;
-    ASSERT_SUCCESS(rsp, ww::identity::policy_agent::verify_credential(vc_object_in, vc_in, "download"), "invalid request, ill-formed credential");
+    ASSERT_SUCCESS(rsp, ww::identity::policy_agent::verify_credential(vc_object_in, vc_in, "DownloadCredential"), "invalid request, ill-formed credential");
 
     // extract claims
     const char *op = vc_in.credential_.credentialSubject_.claims_.get_string("operation");
@@ -69,23 +69,6 @@ bool ww::download::download_token::do_download(
                    "unexpected error: failed to generate capability");
 
     // this assumes that generating the capability does not change state, depending on
-    //                                                                        how the nonce is created this may need to change.
+    // how the nonce is created this may need to change.
     return rsp.value(result, false);
-    // ww::identity::VerifyingContext verifier;
-    // std::vector<std::string> prefix_path;
-    // prefix_path.push_back("gg");
-
-    // std::string valid_pem_key = "-----BEGIN PUBLIC KEY-----\nMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEiEnWZtKnzHZutccKe15hpBKelgqHQC2J\n5Wqae1bfbLZgsVNBzaU7OjFRgUjkOoJAKcPmPIC+NGMAA6DIe/YDOkMjm1yCGWgJ\ndyYf0W2V3UfvCd/auxn+D5D1wWFw4gEB\n-----END PUBLIC KEY-----";
-    // std::string valid_chain_code = "MTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWY="; // base64 32 bytes
-    // // ASSERT_SUCCESS(rsp, verifier.initialize(prefix_path, valid_pem_key, valid_chain_code),
-    // //                "invalid request, invalid issuer public key/chain code");
-    // pdo_contracts::crypto::signing::PublicKey public_key;
-    // ww::types::ByteArray ss(valid_pem_key.begin(), valid_pem_key.end());
-    // ww::types::ByteArray vv;
-    // pdo_contracts::crypto::SHA256Hash(ss, vv);
-    // std::string gg(vv.begin(), vv.end());
-    // ww::value::String s(gg.c_str());
-    // // ERROR_IF_NOT(public_key.Deserialize(valid_pem_key), "Invalid public key");
-    // // return rsp.success(false);
-    // return rsp.value(s, false);
 }

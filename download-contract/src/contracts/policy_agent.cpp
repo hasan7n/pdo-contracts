@@ -111,6 +111,7 @@ bool ww::identity::policy_agent::policy_agent_function(
     ww::identity::Credential public_key_credential = credentials.at("public_key");
     std::string subject = membership_credential.credentialSubject_.subject_.id_;
     credential_out.credentialSubject_.subject_.id_ = subject;
+    credential_out.type_ = {"DownloadCredential"};
 
     // -----------------------------------------------------------------
     // Write your logic here

@@ -45,7 +45,8 @@ bool initialize_contract(const Environment &env, Response &rsp)
 
     ASSERT_SUCCESS(rsp, ww::exchange::token_object::initialize_contract(env),
                    "failed to initialize the base contract");
-
+    ASSERT_SUCCESS(rsp, ww::identity::policy_agent::initialize_issuer_type_map(),
+                   "failed to initialize issuer type map");
     return rsp.success(true);
 }
 
@@ -67,6 +68,7 @@ contract_method_reference_t contract_method_dispatch_table[] = {
     // use the asset
     CONTRACT_METHOD2(do_download, ww::download::download_token::do_download),
     CONTRACT_METHOD2(register_trusted_issuer, ww::identity::policy_agent::register_trusted_issuer),
+    CONTRACT_METHOD2(list_trusted_issuers, ww::identity::policy_agent::list_trusted_issuers),
 
     // object transfer, escrow & claim methods
     CONTRACT_METHOD2(transfer, ww::exchange::token_object::transfer),

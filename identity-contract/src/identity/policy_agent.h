@@ -60,6 +60,7 @@ namespace policy_agent
     bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
 
     // Functions to extend the functionality of the policy agent
+    bool initialize_issuer_type_map();
     bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const std::string& credential_type);
     bool fetch_trusted_issuer(const std::string& issuer_id, ww::identity::VerifyingContext& vc, const std::string& credential_type);
     bool verify_credential(const ww::value::Object& vc_object, ww::identity::VerifiableCredential& vc, const std::string& credential_type);
