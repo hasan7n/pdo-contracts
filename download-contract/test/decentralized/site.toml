@@ -1,0 +1,44 @@
+[[EnclaveService]]
+URL = "http://localhost:7101"
+Names = [ "localhost/eservice1",]
+
+[[EnclaveService]]
+URL = "http://localhost:7102"
+Names = [ "localhost/eservice2",]
+
+[[EnclaveService]]
+URL = "http://localhost:7103"
+Names = [ "localhost/eservice3",]
+
+[[EnclaveService]]
+URL = "http://localhost:7104"
+Names = [ "localhost/eservice4",]
+
+[[EnclaveService]]
+URL = "http://localhost:7105"
+Names = [ "localhost/eservice5",]
+
+[[StorageService]]
+URL = "http://localhost:7201"
+Names = [ "localhost/sservice1",]
+
+[[ProvisioningService]]
+URL = "http://localhost:7001"
+Names = [ "localhost/pservice1",]
+
+[[ProvisioningService]]
+URL = "http://localhost:7002"
+Names = [ "localhost/pservice2",]
+
+[[ProvisioningService]]
+URL = "http://localhost:7003"
+Names = [ "localhost/pservice3",]
+
+[[ProvisioningService]]
+URL = "http://localhost:7004"
+Names = [ "localhost/pservice4",]
+
+[[ProvisioningService]]
+URL = "http://localhost:7005"
+Names = [ "localhost/pservice5",]
+
