@@ -14,3 +14,6 @@ pdo/download/scripts/scripts.py
 pdo/download/operations/__init__.py
 pdo/download/operations/download.py
 pdo/download/utils.py
+pdo/download/decentralized/__init__.py
+pdo/download/decentralized/download_token.py
+pdo/download/decentralized/policy_agent.py

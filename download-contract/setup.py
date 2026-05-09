@@ -81,6 +81,7 @@ setup(
         "pdo.download.plugins",
         "pdo.download.scripts",
         "pdo.download.operations",
+        "pdo.download.decentralized",
         "pdo.download.resources",
         "pdo.download.resources.etc",
         "pdo.download.resources.context",
