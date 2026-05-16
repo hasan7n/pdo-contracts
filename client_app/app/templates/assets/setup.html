@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Register Asset — PDO Client{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Register Asset</h1>
+            <p class="subtitle">Create a PDO identity contract for a new data asset and register it in the asset registry.</p>
+        </div>
+        <a href="/" class="btn">Cancel</a>
+    </div>
+
+    <div class="card card-narrow">
+        {% if error %}
+        <div class="alert alert-error">{{ error }}</div>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_name">Asset Name</label>
+                <input type="text" id="id_name" name="name"
+                       value="{{ form.name|default:'' }}"
+                       placeholder="e.g. genomics_dataset_1" required>
+                <small>Identifier used in the PDO context (no spaces, use underscores).</small>
+            </div>
+
+            <div class="form-group">
+                <label for="id_data_source">Data Source Path</label>
+                <input type="text" id="id_data_source" name="data_source"
+                       value="{{ form.data_source|default:'' }}"
+                       placeholder="/path/to/data/file.txt" required>
+                <small>Local filesystem path to the data file managed by the guardian.</small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_guardian_url">Guardian URL</label>
+                    <input type="text" id="id_guardian_url" name="guardian_url"
+                           value="{{ form.guardian_url|default:'' }}"
+                           placeholder="localhost" required>
+                </div>
+                <div class="form-group">
+                    <label for="id_guardian_port">Guardian Port</label>
+                    <input type="number" id="id_guardian_port" name="guardian_port"
+                           value="{{ form.guardian_port|default:'' }}"
+                           placeholder="7000" required>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Register Asset</button>
+                <a href="/" class="btn">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

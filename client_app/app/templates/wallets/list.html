@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Wallets — PDO Client{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Wallets</h1>
+            <p class="subtitle">Manage your credential wallets for accessing assets.</p>
+        </div>
+        <button type="button" class="btn btn-primary"
+                data-modal-open="create-wallet-modal">+ Create Wallet</button>
+    </div>
+
+    {% if wallets %}
+    <div class="card-grid">
+        {% for w in wallets %}
+        <div class="card">
+            <h3>{{ w.name }}</h3>
+            <div class="card-meta did-display">{{ w.did }}</div>
+            <div class="card-actions">
+                <a href="{% url 'wallet_detail' pk=w.pk %}" class="btn btn-sm">Open</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-state">No wallets yet. Create one to start collecting credentials.</p>
+    {% endif %}
+</div>
+
+<!-- Create Wallet Modal -->
+<div id="create-wallet-modal" class="modal-backdrop hidden">
+    <form class="modal" style="max-width:400px" method="post">
+        {% csrf_token %}
+        <div class="modal-header">
+            <span class="modal-title">Create Wallet</span>
+            <button type="button" class="modal-close"
+                    data-modal-close="create-wallet-modal">&times;</button>
+        </div>
+        <div class="form-group">
+            <label for="wallet-name-input">Wallet Name</label>
+            <input type="text" id="wallet-name-input" name="name" placeholder="e.g. alice_wallet" required>
+            <small>Used as the PDO context identifier. No spaces.</small>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Create</button>
+            <button type="button" class="btn"
+                    data-modal-close="create-wallet-modal">Cancel</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

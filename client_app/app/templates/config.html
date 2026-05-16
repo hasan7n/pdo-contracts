@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Configuration — PDO Client{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1 class="page-title">Configuration</h1>
+            <p class="subtitle">Set the service URLs and your identity.</p>
+        </div>
+    </div>
+
+    <div class="card card-narrow">
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="id_public_key">Public Key / Username</label>
+                <input type="text" id="id_public_key" name="public_key"
+                       value="{{ config.public_key }}" placeholder="e.g. alice" required>
+                <small>This identifies you in PDO contract operations.</small>
+            </div>
+
+            <hr>
+
+            <div class="form-group">
+                <label for="id_ledger_url">Ledger URL</label>
+                <input type="text" id="id_ledger_url" name="ledger_url"
+                       value="{{ config.ledger_url }}" placeholder="http://127.0.0.1:6600" required>
+            </div>
+
+            <div class="form-group">
+                <label for="id_asset_registry_url">Asset Registry URL</label>
+                <input type="text" id="id_asset_registry_url" name="asset_registry_url"
+                       value="{{ config.asset_registry_url }}" placeholder="http://127.0.0.1:8001" required>
+            </div>
+
+            <div class="form-group">
+                <label for="id_template_registry_url">Template Registry URL</label>
+                <input type="text" id="id_template_registry_url" name="template_registry_url"
+                       value="{{ config.template_registry_url }}" placeholder="http://127.0.0.1:8002" required>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Configuration</button>
+                {% if config.is_configured %}
+                <a href="/" class="btn">Back to Assets</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
