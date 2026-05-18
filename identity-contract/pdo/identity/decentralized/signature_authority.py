@@ -4,6 +4,9 @@ from pdo.identity.plugins.signature_authority import (
     cmd_sign_credential,
     cmd_verify_credential,
     cmd_create_signature_authority,
+    cmd_add_vc,
+    cmd_get_vc_list,
+    cmd_get_vp,
 )
 from pdo.client.builder import Context
 from pdo.client.commands import contract as pcontract_cmd
@@ -60,6 +63,20 @@ def verify_credential(state, contract_id, user, **cmd_args):
     return _invoke_signature_authority(
         state, contract_id, user, cmd_verify_credential, **cmd_args
     )
+
+
+def add_vc(state, contract_id, user, **cmd_args):
+    return _invoke_signature_authority(state, contract_id, user, cmd_add_vc, **cmd_args)
+
+
+def get_vc_list(state, contract_id, user, **cmd_args):
+    return _invoke_signature_authority(
+        state, contract_id, user, cmd_get_vc_list, **cmd_args
+    )
+
+
+def get_vp(state, contract_id, user, **cmd_args):
+    return _invoke_signature_authority(state, contract_id, user, cmd_get_vp, **cmd_args)
 
 
 def create_signature_authority(state, user, **cmd_args):
