@@ -48,9 +48,7 @@ def register_signing_context(state, contract_id, user, **cmd_args):
 
 
 def get_verifying_key(state, contract_id, user, **cmd_args):
-    return _invoke_identity(
-        state, contract_id, user, cmd_get_verifying_key, **cmd_args
-    )
+    return _invoke_identity(state, contract_id, user, cmd_get_verifying_key, **cmd_args)
 
 
 def sign(state, contract_id, user, **cmd_args):

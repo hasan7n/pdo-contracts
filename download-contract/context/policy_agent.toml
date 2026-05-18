@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------
 # download_policy ${identity}
 # -----------------------------------------------------------------
-[download.${identity}.policy_agent]
+[identity.${identity}.policy_agent]
 identity = "${user}"
 module = "pdo.identity.plugins.policy_agent"
 source = "${ContractFamily.Download.policy_agent.source}"

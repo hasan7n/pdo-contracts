@@ -240,25 +240,25 @@ try id_signature_authority register ${OPTS} --contract identity.public_key_autho
 
 
 ########### setup: data_download policy agent
-try download_policy create ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy create ${OPTS} --contract identity.simple_download.policy_agent \
     -d 'data download policy agent: accepts membership, consent, and public key VCs.'
 
 yell register issuer1 with the policy agent
-try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
     --issuer identity.membership_authority.signature_authority --path membership --credential-type membership
 
 
 yell register issuer2 with the policy agent
-try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
     --issuer identity.consent_authority.signature_authority --path consent --credential-type consent
 
 
 yell register issuer3 with the policy agent
-try download_policy register ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
     --issuer identity.public_key_authority.signature_authority --path public_key --credential-type public_key
 
 yell configure the policy agent
-try download_policy set_policy ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy set_policy ${OPTS} --contract identity.simple_download.policy_agent \
     --data ${SCRIPTDIR}/policy_data.json
 
 
@@ -270,7 +270,7 @@ try download_token mint_tokens ${OPTS} --contract token.test1.token_object
 
 yell register a trusted VC issuer for token1
 try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
-    --issuer download.simple_download.policy_agent --path __ISSUER__ --credential-type DownloadCredential
+    --issuer identity.simple_download.policy_agent --path __ISSUER__ --credential-type DownloadCredential
 
 ########### setup: downloader wallet
 
@@ -307,7 +307,7 @@ try id_wallet get_vp ${OPTS} --contract identity.downloader.wallet \
     --types membership consent public_key --file ${TEST_ROOT}/vp.json
 
 yell issue a credential
-try download_policy issue_credential ${OPTS} --contract download.simple_download.policy_agent \
+try download_policy issue_credential ${OPTS} --contract identity.simple_download.policy_agent \
     --presentation ${TEST_ROOT}/vp.json --issued-credential ${TEST_ROOT}/download_vc.json
 
 yell download data
