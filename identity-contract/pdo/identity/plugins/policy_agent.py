@@ -110,15 +110,16 @@ class op_register_trusted_issuer(pcontract.contract_op_base) :
 
         subparser.add_argument(
             "-t",
-            "--credential-type",
-            help="Type of credentials issued by the issuer",
+            "--credential-types",
+            help="One or more types of credentials issued by the issuer",
             type=str,
+            nargs='+',
             required=True,
         )
 
 
     @classmethod
-    def invoke(cls, state, session_params, issuer, path, key, chaincode, credential_type, **kwargs) :
+    def invoke(cls, state, session_params, issuer, path, key, chaincode, credential_types, **kwargs) :
         session_params['commit'] = True
 
         params = {
@@ -126,7 +127,7 @@ class op_register_trusted_issuer(pcontract.contract_op_base) :
             'issuer_identity' : issuer,
             'public_key' : key,
             'context_path' : path,
-            'credential_type': credential_type,
+            'credential_types': credential_types,
         }
 
         message = invocation_request('register_trusted_issuer', **params)
@@ -275,14 +276,15 @@ class cmd_register_trusted_issuer(pcommand.contract_command_base) :
 
         subparser.add_argument(
                 "-t",
-                "--credential-type",
-                help="Type of credentials issued by the issuer",
+                "--credential-types",
+                help="One or more types of credentials issued by the issuer",
                 type=str,
+                nargs='+',
                 required=True,
             )
 
     @classmethod
-    def invoke(cls, state, context, issuer, path, credential_type, **kwargs) :
+    def invoke(cls, state, context, issuer, path, credential_types, **kwargs) :
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if not save_file :
             raise ValueError('signature authority contract must be created and initialized')
@@ -314,7 +316,7 @@ class cmd_register_trusted_issuer(pcommand.contract_command_base) :
             path=path,
             key=key_data,
             chaincode=chaincode_data,
-            credential_type=credential_type,
+            credential_types=credential_types,
             **kwargs)
 
         cls.display('registered trusted issuer {}'.format(issuer))

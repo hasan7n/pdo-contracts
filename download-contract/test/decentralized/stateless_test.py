@@ -115,7 +115,12 @@ def owner_setup():
 
     print("Registering token trusted issuer...")
     download_token.register_trusted_issuer(
-        state, read_var("token"), read_var("download_policy"), asset_owner
+        state,
+        read_var("token"),
+        read_var("download_policy"),
+        asset_owner,
+        credential_types=["DownloadCredential"],
+        path=["__ISSUER__"],
     )
 
     print("Registering policy agent trusted issuer 1...")
@@ -125,7 +130,7 @@ def owner_setup():
         read_var("membership_authority"),
         asset_owner,
         path=["membership"],
-        credential_type="membership",
+        credential_types=["membership"],
     )
     time.sleep(1)
     print("Registering policy agent trusted issuer 2...")
@@ -135,7 +140,7 @@ def owner_setup():
         read_var("consent_authority"),
         asset_owner,
         path=["consent"],
-        credential_type="consent",
+        credential_types=["consent"],
     )
     time.sleep(1)
     print("Registering policy agent trusted issuer 3...")
@@ -145,7 +150,7 @@ def owner_setup():
         read_var("key_authority"),
         asset_owner,
         path=["key"],
-        credential_type="public_key",
+        credential_types=["public_key"],
     )
     time.sleep(1)
 

@@ -77,23 +77,23 @@ try download_token mint_tokens ${OPTS} --contract token.test1.token_object
 
 yell register a trusted VC issuer for token1
 try download_token register ${OPTS}  --contract token.test1.token_object.token_1 \
-    --issuer identity.simple_download.policy_agent --path __ISSUER__ --credential-type DownloadCredential
+    --issuer identity.simple_download.policy_agent --path __ISSUER__ --credential-types DownloadCredential
 
 ########### setup: data_download policy agent configuration
 
 yell register issuer1 with the policy agent
 try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
-    --issuer identity.membership_authority.signature_authority --path membership --credential-type membership
+    --issuer identity.membership_authority.signature_authority --path membership --credential-types membership
 
 
 yell register issuer2 with the policy agent
 try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
-    --issuer identity.consent_authority.signature_authority --path consent --credential-type consent
+    --issuer identity.consent_authority.signature_authority --path consent --credential-types consent
 
 
 yell register issuer3 with the policy agent
 try download_policy register ${OPTS} --contract identity.simple_download.policy_agent \
-    --issuer identity.public_key_authority.signature_authority --path public_key --credential-type public_key
+    --issuer identity.public_key_authority.signature_authority --path public_key --credential-types public_key
 
 yell configure the policy agent
 try download_policy set_policy ${OPTS} --contract identity.simple_download.policy_agent \

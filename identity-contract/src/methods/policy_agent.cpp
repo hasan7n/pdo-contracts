@@ -60,6 +60,21 @@ static bool get_issuer_type_mapping(ww::value::Object &type_map)
 }
 
 // -----------------------------------------------------------------
+// UTILITY: check whether a string is present in a ww::value::Array
+// -----------------------------------------------------------------
+static bool array_contains_string(const ww::value::Array &array, const std::string &value)
+{
+    const size_t count = array.get_count();
+    for (size_t i = 0; i < count; i++)
+    {
+        const char *t = array.get_string(i);
+        if (t != nullptr && std::string(t) == value)
+            return true;
+    }
+    return false;
+}
+
+// -----------------------------------------------------------------
 // FUNCTION: initialize_issuer_type_map
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::initialize_issuer_type_map()
@@ -76,7 +91,7 @@ bool ww::identity::policy_agent::initialize_issuer_type_map()
 bool ww::identity::policy_agent::save_trusted_issuer(
     const std::string &issuer_id,
     const ww::identity::VerifyingContext &vc,
-    const std::string &credential_type)
+    const ww::value::Array &credential_types)
 {
     // ---------- save the trusted issuer ----------
     ww::value::Value trusted_issuer;
@@ -91,11 +106,12 @@ bool ww::identity::policy_agent::save_trusted_issuer(
                  "unexpected error, failed to save trusted issuer");
 
     // update issuer_type_map stored as a JSON dict in policy_metadata_store
+    // each issuer maps to an array of credential types it is trusted to issue
     ww::value::Object type_map;
     ERROR_IF_NOT(get_issuer_type_mapping(type_map),
                  "unexpected error, failed to load issuer type map");
 
-    ERROR_IF_NOT(type_map.set_string(issuer_id.c_str(), credential_type.c_str()),
+    ERROR_IF_NOT(type_map.set_value(issuer_id.c_str(), credential_types),
                  "unexpected error, failed to update issuer type map");
 
     std::string type_map_str;
@@ -121,16 +137,18 @@ bool ww::identity::policy_agent::fetch_trusted_issuer(
     ERROR_IF_NOT(trusted_issuer_store.get(issuer_id, trusted_issuer_str),
                  "unexpected error, failed to fetch trusted issuer");
 
-    // verify issuer type from the type map
+    // verify issuer type from the type map: each issuer maps to an array
+    // of credential types it is trusted to issue
     ww::value::Object type_map;
     ERROR_IF_NOT(get_issuer_type_mapping(type_map),
                  "unexpected error, failed to load issuer type map");
 
-    const char *stored_credential_type_ptr = type_map.get_string(issuer_id.c_str());
-    ERROR_IF_NOT(stored_credential_type_ptr != nullptr,
+    ww::value::Array stored_types;
+    ERROR_IF_NOT(type_map.get_value(issuer_id.c_str(), stored_types),
                  "invalid request, issuer not found in type map");
-    ERROR_IF_NOT(std::string(stored_credential_type_ptr) == credential_type,
-                 "invalid request, credential type does not match the trusted issuer type");
+
+    ERROR_IF_NOT(array_contains_string(stored_types, credential_type),
+                 "invalid request, credential type does not match any trusted type for this issuer");
 
     ww::value::Object trusted_issuer;
     ERROR_IF_NOT(trusted_issuer.deserialize(trusted_issuer_str.c_str()),
@@ -297,9 +315,16 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message &msg, con
                    "invalid request, missing required parameters");
 
     const std::string issuer_identity(msg.get_string("issuer_identity"));
-    const std::string credential_type(msg.get_string("credential_type"));
     const std::string public_key_str(msg.get_string("public_key"));
     const std::string chain_code_str(msg.get_string("chain_code"));
+
+    // credential_types is an array of credential type strings this issuer is trusted to issue;
+    // the schema already enforces array-of-string shape, so we only check non-emptiness here
+    ww::value::Array credential_types;
+    ASSERT_SUCCESS(rsp, msg.get_value("credential_types", credential_types),
+                   "invalid request, missing credential_types");
+    ASSERT_SUCCESS(rsp, credential_types.get_count() > 0,
+                   "invalid request, credential_types must not be empty");
 
     // Get and validate the path parameter. This is the path TO the
     // key relative to the contract object, any verification key from
@@ -314,7 +339,7 @@ bool ww::identity::policy_agent::register_trusted_issuer(const Message &msg, con
     ww::identity::VerifyingContext verifier;
     ASSERT_SUCCESS(rsp, verifier.initialize(prefix_path, public_key_str, chain_code_str),
                    "invalid request, invalid issuer public key/chain code");
-    ASSERT_SUCCESS(rsp, save_trusted_issuer(issuer_identity, verifier, credential_type),
+    ASSERT_SUCCESS(rsp, save_trusted_issuer(issuer_identity, verifier, credential_types),
                    "unexpected error, failed to save issuer information");
 
     // ---------- RETURN ----------
@@ -473,13 +498,13 @@ bool ww::identity::policy_agent::get_policy_data(const Message &msg, const Envir
 
 // -----------------------------------------------------------------
 // METHOD: list_trusted_issuers
-//   Return a dictionary mapping issuer ID to credential type for all
-//   registered trusted issuers.
+//   Return a dictionary mapping issuer ID to the list of credential
+//   types each issuer is trusted to issue.
 //
 // JSON PARAMETERS:
 //   none
 // RETURNS:
-//   object mapping issuer_id -> credential_type
+//   object mapping issuer_id -> [credential_type, ...]
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::list_trusted_issuers(const Message &msg, const Environment &env, Response &rsp)
 {

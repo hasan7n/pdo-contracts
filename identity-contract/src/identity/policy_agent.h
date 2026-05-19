@@ -30,7 +30,7 @@
 #define POLICY_AGENT_REGISTER_ISSUER_PARAM_SCHEMA       \
     "{"                                                 \
         SCHEMA_KW(issuer_identity, "") ","              \
-        SCHEMA_KW(credential_type, "") ","              \
+        SCHEMA_KW(credential_types, [ "" ]) ","         \
         SCHEMA_KW(context_path, [ "" ]) ","             \
         SCHEMA_KW(public_key, "") ","                   \
         SCHEMA_KW(chain_code, "")                       \
@@ -61,7 +61,7 @@ namespace policy_agent
 
     // Functions to extend the functionality of the policy agent
     bool initialize_issuer_type_map();
-    bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const std::string& credential_type);
+    bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const ww::value::Array& credential_types);
     bool fetch_trusted_issuer(const std::string& issuer_id, ww::identity::VerifyingContext& vc, const std::string& credential_type);
     bool verify_credential(const ww::value::Object& vc_object, ww::identity::VerifiableCredential& vc, const std::string& credential_type);
     bool issue_credential(
