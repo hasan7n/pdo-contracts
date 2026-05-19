@@ -517,7 +517,7 @@ class cmd_get_requirements(pcommand.contract_command_base) :
         result = pcontract.invoke_contract_op(
             op_get_requirements, state, context, session,
             **kwargs)
-
+        result = json.loads(result)
         cls.display(result)
         return result
 
