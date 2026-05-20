@@ -88,24 +88,6 @@ static bool array_contains_string(const ww::value::Array &array, const std::stri
 }
 
 // -----------------------------------------------------------------
-// UTILITY: check whether prefix (as a ww::value::Array of strings) is a
-// prefix of candidate (as a vector of strings)
-// -----------------------------------------------------------------
-static bool path_is_prefix_of(const ww::value::Array &prefix, const std::vector<std::string> &candidate)
-{
-    const size_t prefix_count = prefix.get_count();
-    if (prefix_count > candidate.size())
-        return false;
-    for (size_t i = 0; i < prefix_count; i++)
-    {
-        const char *p = prefix.get_string(i);
-        if (p == nullptr || candidate[i] != p)
-            return false;
-    }
-    return true;
-}
-
-// -----------------------------------------------------------------
 // FUNCTION: initialize_trusted_issuers
 // -----------------------------------------------------------------
 bool ww::identity::policy_agent::initialize_trusted_issuers()
@@ -182,28 +164,43 @@ bool ww::identity::policy_agent::fetch_trusted_issuer(
     {
         ww::value::Object record;
         if (!records.get_value(i, record))
+        {
+            CONTRACT_SAFE_LOG(3, "malformed trusted issuers store: record is not an object, skipping");
             continue;
+        }
 
         // filter by credential type first (cheap check)
         ww::value::Array types;
         if (!record.get_value("credential_types", types))
+        {
+            CONTRACT_SAFE_LOG(3, "malformed trusted issuers store: record missing credential_types, skipping");
             continue;
+        }
         if (!array_contains_string(types, credential_type))
             continue;
 
-        // extract verifying_context object, then its prefix_path
+        // deserialize the verifying context, then ask it whether its
+        // prefix_path matches the credential's context_path
         ww::value::Object vctx_object;
         if (!record.get_value("verifying_context", vctx_object))
+        {
+            CONTRACT_SAFE_LOG(3, "malformed trusted issuers store: record missing verifying_context, skipping");
+            continue;
+        }
+
+        ww::identity::VerifyingContext candidate;
+        if (!candidate.deserialize(vctx_object))
+        {
+            CONTRACT_SAFE_LOG(3, "malformed trusted issuers store: failed to deserialize verifying_context, skipping");
+            continue;
+        }
+
+        if (!candidate.is_prefix_of(credential_path))
             continue;
 
-        ww::value::Array prefix_path;
-        if (!vctx_object.get_value("prefix_path", prefix_path))
-            continue;
-
-        if (!path_is_prefix_of(prefix_path, credential_path))
-            continue;
-
-        // first match wins
+        // first match wins — re-deserialize from the same wire-format
+        // object into the caller's out_vc (defensive against future
+        // additions to VerifyingContext that may not be copy-safe)
         ERROR_IF_NOT(out_vc.deserialize(vctx_object),
                      "unexpected error, failed to deserialize verifying context");
         return true;
