@@ -16,6 +16,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include <map>
 
 #include "Environment.h"
@@ -60,9 +61,9 @@ namespace policy_agent
     bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
 
     // Functions to extend the functionality of the policy agent
-    bool initialize_issuer_type_map();
+    bool initialize_trusted_issuers();
     bool save_trusted_issuer(const std::string& issuer_id, const ww::identity::VerifyingContext& vc, const ww::value::Array& credential_types);
-    bool fetch_trusted_issuer(const std::string& issuer_id, ww::identity::VerifyingContext& vc, const std::string& credential_type);
+    bool fetch_trusted_issuer(const std::string& issuer_id, const std::string& credential_type, const std::vector<std::string>& credential_path, ww::identity::VerifyingContext& out_vc);
     bool verify_credential(const ww::value::Object& vc_object, ww::identity::VerifiableCredential& vc, const std::string& credential_type);
     bool issue_credential(
         const std::string& originator,

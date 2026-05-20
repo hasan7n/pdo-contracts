@@ -45,8 +45,8 @@ bool initialize_contract(const Environment &env, Response &rsp)
 
     ASSERT_SUCCESS(rsp, ww::exchange::token_object::initialize_contract(env),
                    "failed to initialize the base contract");
-    ASSERT_SUCCESS(rsp, ww::identity::policy_agent::initialize_issuer_type_map(),
-                   "failed to initialize issuer type map");
+    ASSERT_SUCCESS(rsp, ww::identity::policy_agent::initialize_trusted_issuers(),
+                   "failed to initialize trusted issuers map");
     return rsp.success(true);
 }
 
