@@ -70,13 +70,8 @@
         SCHEMA_KW(context_path, [ "" ])                 \
     "}"
 
-#define SIGNING_CONTEXT_DESCRIPTOR_SCHEMA               \
-    "{"                                                 \
-        SCHEMA_KW(path, [ "" ]) ","                     \
-        SCHEMA_KW(description, "") ","                  \
-        SCHEMA_KW(extensible, true)                     \
-    "}"
-
+// SIGNING_CONTEXT_DESCRIPTOR_SCHEMA is defined in SigningContextManager.h
+// (the manager owns the per-node descriptor shape it produces).
 #define IDENTITY_LIST_SIGNING_CONTEXTS_RESULT_SCHEMA    \
     "{"                                                 \
         SCHEMA_KWS(contexts, "[" SIGNING_CONTEXT_DESCRIPTOR_SCHEMA "]") \
