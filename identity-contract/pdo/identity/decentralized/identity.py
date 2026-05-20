@@ -1,6 +1,7 @@
 from pdo.identity.plugins.identity import (
     cmd_get_verifying_key,
     cmd_register_signing_context,
+    cmd_list_signing_contexts,
     cmd_sign,
     cmd_verify,
     cmd_create_identity,
@@ -44,6 +45,12 @@ def _invoke_identity(state, contract_id, user, cmd_class, **cmd_args):
 def register_signing_context(state, contract_id, user, **cmd_args):
     return _invoke_identity(
         state, contract_id, user, cmd_register_signing_context, **cmd_args
+    )
+
+
+def list_signing_contexts(state, contract_id, user, **cmd_args):
+    return _invoke_identity(
+        state, contract_id, user, cmd_list_signing_contexts, **cmd_args
     )
 
 

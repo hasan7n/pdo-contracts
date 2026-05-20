@@ -6,6 +6,7 @@ from pdo.identity.decentralized.policy_agent import (  # noqa: F401
     get_policy_data,
     get_requirements,
     issue_policy_credential,
+    list_signing_contexts,
 )
 import os
 

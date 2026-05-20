@@ -6,6 +6,7 @@ from pdo.identity.plugins.policy_agent import (
     cmd_get_policy_data,
     cmd_list_trusted_issuers,
     cmd_get_requirements,
+    cmd_list_signing_contexts,
 )
 from pdo.client.builder import Context
 from pdo.client.commands import contract as pcontract_cmd
@@ -67,6 +68,12 @@ def register_trusted_issuer(state, contract_id, issuer_contract_id, user, **cmd_
 def list_trusted_issuers(state, contract_id, user, **cmd_args):
     return _invoke_policy_agent(
         state, contract_id, user, cmd_list_trusted_issuers, **cmd_args
+    )
+
+
+def list_signing_contexts(state, contract_id, user, **cmd_args):
+    return _invoke_policy_agent(
+        state, contract_id, user, cmd_list_signing_contexts, **cmd_args
     )
 
 

@@ -34,6 +34,7 @@ __all__ = [
     'op_get_extended_verifying_key',
     'op_register_signing_context',
     'op_describe_signing_context',
+    'op_list_signing_contexts',
     'op_sign',
     'op_verify',
     'op_verify_credential',
@@ -47,6 +48,7 @@ __all__ = [
     'cmd_issue_policy_credential',
     'cmd_verify_credential',
     'cmd_register_signing_context',
+    'cmd_list_signing_contexts',
     'cmd_get_verifying_key',
     'cmd_create_policy_agent',
     'cmd_set_policy_data',
@@ -63,12 +65,14 @@ op_get_verifying_key = identity_plugin.op_get_verifying_key
 op_get_extended_verifying_key = identity_plugin.op_get_extended_verifying_key
 op_register_signing_context = identity_plugin.op_register_signing_context
 op_describe_signing_context = identity_plugin.op_describe_signing_context
+op_list_signing_contexts = identity_plugin.op_list_signing_contexts
 op_sign = identity_plugin.op_sign
 op_verify = signature_plugin.op_verify
 op_verify_credential = signature_plugin.op_verify_credential
 
 cmd_verify_credential = signature_plugin.cmd_verify_credential
 cmd_register_signing_context = identity_plugin.cmd_register_signing_context
+cmd_list_signing_contexts = identity_plugin.cmd_list_signing_contexts
 cmd_get_verifying_key = identity_plugin.cmd_get_verifying_key
 
 logger = logging.getLogger(__name__)
@@ -530,6 +534,7 @@ __operations__ = [
     op_get_extended_verifying_key,
     op_register_signing_context,
     op_describe_signing_context,
+    op_list_signing_contexts,
     op_sign,
     op_verify,
     op_verify_credential,
@@ -546,6 +551,7 @@ do_policy_agent_contract = pcontract.create_shell_command('policy_agent_contract
 __commands__ = [
     cmd_get_verifying_key,
     cmd_register_signing_context,
+    cmd_list_signing_contexts,
     cmd_verify_credential,
     cmd_register_trusted_issuer,
     cmd_issue_policy_credential,

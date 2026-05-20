@@ -1,6 +1,7 @@
 from pdo.identity.plugins.signature_authority import (
     cmd_get_verifying_key,
     cmd_register_signing_context,
+    cmd_list_signing_contexts,
     cmd_sign_credential,
     cmd_verify_credential,
     cmd_create_signature_authority,
@@ -44,6 +45,12 @@ def _invoke_signature_authority(state, contract_id, user, cmd_class, **cmd_args)
 def register_signing_context(state, contract_id, user, **cmd_args):
     return _invoke_signature_authority(
         state, contract_id, user, cmd_register_signing_context, **cmd_args
+    )
+
+
+def list_signing_contexts(state, contract_id, user, **cmd_args):
+    return _invoke_signature_authority(
+        state, contract_id, user, cmd_list_signing_contexts, **cmd_args
     )
 
 

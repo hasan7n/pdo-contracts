@@ -31,6 +31,7 @@ __all__ = [
     'op_get_extended_verifying_key',
     'op_register_signing_context',
     'op_describe_signing_context',
+    'op_list_signing_contexts',
     'op_sign',
     'op_verify',
     'op_add_vc',
@@ -38,6 +39,7 @@ __all__ = [
     'op_get_vp',
     'cmd_get_verifying_key',
     'cmd_register_signing_context',
+    'cmd_list_signing_contexts',
     'cmd_sign',
     'cmd_verify',
     'cmd_create_identity',
@@ -201,6 +203,33 @@ class op_describe_signing_context(pcontract.contract_op_base) :
         session_params['commit'] = True
 
         message = invocation_request('describe_signing_context', context_path=path)
+        result = pcontract_cmd.send_to_contract(state, message, **session_params)
+        cls.log_invocation(message, result)
+
+        return result
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class op_list_signing_contexts(pcontract.contract_op_base) :
+
+    name = "list_signing_contexts"
+    help = "List signing contexts under a path (owner only)"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-p', '--path',
+            help='Subtree root to list (omit to list from root)',
+            type=str,
+            nargs='*',
+            default=[],
+            required=False)
+
+    @classmethod
+    def invoke(cls, state, session_params, path, **kwargs) :
+        session_params['commit'] = False
+
+        message = invocation_request('list_signing_contexts', context_path=path)
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
         cls.log_invocation(message, result)
 
@@ -444,6 +473,47 @@ class cmd_register_signing_context(pcommand.contract_command_base) :
 
         cls.display(f'registered signing context {path}')
         return True
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
+class cmd_list_signing_contexts(pcommand.contract_command_base) :
+    name = "list_signing_contexts"
+    help = "List signing contexts under a path (owner only)"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-p', '--path',
+            help='Subtree root to list (omit to list from root)',
+            type=str,
+            nargs='*',
+            default=[],
+            required=False)
+        subparser.add_argument(
+            '-f', '--file',
+            help='File to save the result (JSON); omit to print to stdout',
+            dest='output_file',
+            type=str,
+            required=False)
+
+    @classmethod
+    def invoke(cls, state, context, path, output_file=None, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('identity contract must be created and initialized')
+
+        session = pbuilder.SessionParameters(save_file=save_file)
+        result = pcontract.invoke_contract_op(
+            op_list_signing_contexts, state, context, session, path, **kwargs)
+
+        if output_file :
+            with open(output_file, 'w') as fp :
+                fp.write(result)
+            cls.display('saved signing contexts to {}'.format(output_file))
+        else :
+            cls.display(result)
+
+        return result
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
@@ -707,6 +777,7 @@ __operations__ = [
     op_get_extended_verifying_key,
     op_register_signing_context,
     op_describe_signing_context,
+    op_list_signing_contexts,
     op_sign,
     op_verify,
     op_add_vc,
@@ -719,6 +790,7 @@ do_identity_contract = pcontract.create_shell_command('identity_contract', __ope
 __commands__ = [
     cmd_get_verifying_key,
     cmd_register_signing_context,
+    cmd_list_signing_contexts,
     cmd_sign,
     cmd_verify,
     cmd_create_identity,

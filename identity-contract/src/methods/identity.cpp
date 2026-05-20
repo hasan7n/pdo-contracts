@@ -257,6 +257,118 @@ bool ww::identity::identity::describe_signing_context(
 
 // -----------------------------------------------------------------
 // METHOD:
+//   list_signing_contexts
+//
+//   Walk the signing-context tree starting at the given context_path
+//   (empty array means root) and return a flat list of descriptors
+//   { path, description, extensible }. Descent stops at extensible
+//   contexts. Paths that descend past an extensible context are
+//   rejected. Owner-only; keys are never returned.
+//
+// JSON PARAMETERS:
+//   IDENTITY_LIST_SIGNING_CONTEXTS_PARAM_SCHEMA
+// RETURNS:
+//   IDENTITY_LIST_SIGNING_CONTEXTS_RESULT_SCHEMA
+// -----------------------------------------------------------------
+bool ww::identity::identity::list_signing_contexts(
+    const Message& msg, const Environment& env, Response& rsp)
+{
+    ASSERT_SENDER_IS_OWNER(env, rsp);
+    ASSERT_INITIALIZED(rsp);
+
+    ASSERT_SUCCESS(rsp, msg.validate_schema(IDENTITY_LIST_SIGNING_CONTEXTS_PARAM_SCHEMA),
+                   "invalid request, missing required parameters");
+
+    // accept an empty path (= root); minimum_size = 0
+    std::vector<std::string> root_path;
+    ASSERT_SUCCESS(rsp, get_context_path(msg, root_path, 0),
+                   "invalid request, ill-formed context path");
+
+    ww::identity::SigningContextManager manager(signing_context_store);
+
+    // Sanity-check the starting point: it must resolve to a concrete (non-extended) node
+    {
+        ww::identity::SigningContext start_ctx;
+        std::vector<std::string> start_ext;
+        ASSERT_SUCCESS(rsp, manager.find_context(root_path, start_ext, start_ctx),
+                       "invalid request, unable to locate context");
+        ASSERT_SUCCESS(rsp, start_ext.size() == 0,
+                       "invalid request, path descends into an extensible context");
+    }
+
+    // DFS with an explicit work stack to avoid recursion on the WASM stack
+    std::vector<std::vector<std::string>> work_stack;
+    work_stack.push_back(root_path);
+
+    ww::value::Array contexts_out;
+
+    while (! work_stack.empty())
+    {
+        std::vector<std::string> current_path = work_stack.back();
+        work_stack.pop_back();
+
+        ww::identity::SigningContext ctx;
+        std::vector<std::string> ext;
+        ASSERT_SUCCESS(rsp, manager.find_context(current_path, ext, ctx),
+                       "unexpected error, failed to load context during walk");
+
+        // serialize so we can read description/extensible/subcontexts as JSON
+        ww::value::Object ctx_obj;
+        ASSERT_SUCCESS(rsp, ctx.serialize(ctx_obj),
+                       "unexpected error, failed to serialize context during walk");
+
+        // build a descriptor { path, description, extensible } — never include keys
+        ww::value::Array path_array;
+        for (const auto& element : current_path)
+        {
+            ASSERT_SUCCESS(rsp, path_array.append_string(element.c_str()),
+                           "unexpected error, failed to build path array");
+        }
+
+        const char* description_ptr = ctx_obj.get_string("description");
+        const bool is_extensible = ctx_obj.get_boolean("extensible") != 0;
+
+        ww::value::Structure descriptor(SIGNING_CONTEXT_DESCRIPTOR_SCHEMA);
+        ASSERT_SUCCESS(rsp, descriptor.set_value("path", path_array),
+                       "unexpected error, failed to set descriptor path");
+        ASSERT_SUCCESS(rsp, descriptor.set_string("description", description_ptr ? description_ptr : ""),
+                       "unexpected error, failed to set descriptor description");
+        ASSERT_SUCCESS(rsp, descriptor.set_boolean("extensible", is_extensible),
+                       "unexpected error, failed to set descriptor extensible");
+
+        ASSERT_SUCCESS(rsp, contexts_out.append_value(descriptor),
+                       "unexpected error, failed to append descriptor");
+
+        // extensible nodes have no enumerable children — stop descent
+        if (is_extensible)
+            continue;
+
+        ww::value::Array subcontexts;
+        if (! ctx_obj.get_value("subcontexts", subcontexts))
+            continue;
+
+        const size_t child_count = subcontexts.get_count();
+        for (size_t i = 0; i < child_count; i++)
+        {
+            const char* child_name = subcontexts.get_string(i);
+            if (child_name == nullptr)
+                continue;
+
+            std::vector<std::string> child_path = current_path;
+            child_path.emplace_back(child_name);
+            work_stack.push_back(child_path);
+        }
+    }
+
+    ww::value::Structure result(IDENTITY_LIST_SIGNING_CONTEXTS_RESULT_SCHEMA);
+    ASSERT_SUCCESS(rsp, result.set_value("contexts", contexts_out),
+                   "unexpected error, failed to set contexts on result");
+
+    return rsp.value(result, false);
+}
+
+// -----------------------------------------------------------------
+// METHOD:
 //   sign
 //
 // JSON PARAMETERS:
