@@ -22,6 +22,22 @@ Names = [ "localhost/eservice5",]
 URL = "http://localhost:7201"
 Names = [ "localhost/sservice1",]
 
+[[StorageService]]
+URL = "http://localhost:7202"
+Names = [ "localhost/sservice2",]
+
+[[StorageService]]
+URL = "http://localhost:7203"
+Names = [ "localhost/sservice3",]
+
+[[StorageService]]
+URL = "http://localhost:7204"
+Names = [ "localhost/sservice4",]
+
+[[StorageService]]
+URL = "http://localhost:7205"
+Names = [ "localhost/sservice5",]
+
 [[ProvisioningService]]
 URL = "http://localhost:7001"
 Names = [ "localhost/pservice1",]
