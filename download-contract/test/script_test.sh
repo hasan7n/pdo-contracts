@@ -280,7 +280,7 @@ try id_wallet create ${OPTS} --contract identity.downloader.wallet \
 
 ########### start
 yell generating user channel key
-python3 ${SCRIPTDIR}/generate_channel_key.py ${TEST_ROOT}/user_channel_key
+python3 ${SCRIPTDIR}/python/generate_channel_key.py ${TEST_ROOT}/user_channel_key
 
 yell sign membership credential
 try id_signature_authority sign_credential ${OPTS} --contract identity.membership_authority.signature_authority \
@@ -317,7 +317,7 @@ try download_token do_download ${OPTS}  --contract token.test1.token_object.toke
 
 yell read data
 
-python3 ${SCRIPTDIR}/read_data.py ${TEST_ROOT}/encrypted_data.bin \
+python3 ${SCRIPTDIR}/python/read_data.py ${TEST_ROOT}/encrypted_data.bin \
     ${TEST_ROOT}/user_channel_key/private_key.pem ${TEST_ROOT}/decrypted_data.txt
 
 cat ${TEST_ROOT}/decrypted_data.txt

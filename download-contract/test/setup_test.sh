@@ -17,14 +17,15 @@
 set -e
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-: "${LEDGER_WS?Missing environment variable LEDGER_WS}"
+: "${LEDGER_CERT_PATH?Missing environment variable LEDGER_CERT_PATH}"
+: "${SITE_TOML_SOURCE?Missing environment variable SITE_TOML_SOURCE}"
 : "${PDO_LEDGER_URL?Missing environment variable PDO_LEDGER_URL}"
 : "${F_SERVICE_HOST?Missing environment variable F_SERVICE_HOST}"
 : "${USER_KEYS_FOLDER?Missing environment variable USER_KEYS_FOLDER}"
+: "${PDO_INSTALL_ROOT?Missing environment variable PDO_INSTALL_ROOT}"
+: "${PDO_CONTRACTS_ROOT?Missing environment variable PDO_CONTRACTS_ROOT}"
 
-export PDO_CONTRACTS_ROOT="/home/hasan/work/pdos/pdo-contracts"
 export PDO_SOURCE_ROOT=${PDO_CONTRACTS_ROOT}/private-data-objects
-export PDO_INSTALL_ROOT="/home/hasan/work/pdos/pdo_install"
 source ${PDO_SOURCE_ROOT}/build/common-config.sh
 source ${PDO_HOME}/bin/lib/common.sh
 source ${PDO_INSTALL_ROOT}/bin/activate
@@ -32,9 +33,9 @@ source ${PDO_INSTALL_ROOT}/bin/activate
 # copy keys and site.toml from ledger workspace to client workspace
 F_SERVICE_SITE_FILE=${PDO_HOME}/etc/sites/${F_SERVICE_HOST}.toml
 mkdir -p $PDO_LEDGER_KEY_ROOT
-cp ${LEDGER_WS}/ccf/keys/networkcert.pem $PDO_LEDGER_KEY_ROOT
+cp ${LEDGER_CERT_PATH} $PDO_LEDGER_KEY_ROOT
 mkdir -p $PDO_HOME/etc/sites
-cp ${LEDGER_WS}/services/etc/site.toml $F_SERVICE_SITE_FILE
+cp ${SITE_TOML_SOURCE} $F_SERVICE_SITE_FILE
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
@@ -66,7 +67,7 @@ F_LOGFILE=${PDO_LOG_FILE:-__screen__}
 F_CONTEXT_FILE=${SOURCE_ROOT}/test/test_context.toml
 F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/download/context
 F_IDENTITY_TEMPLATES=${PDO_HOME}/contracts/identity/context
-F_PREFERRED=http://localhost:7101
+F_PREFERRED=${F_PREFERRED:-random}
 
 if [ ! -f ${F_SERVICE_SITE_FILE} ] ; then
     die unable to locate the service information file ${F_SERVICE_SITE_FILE}; \
