@@ -1,0 +1,8 @@
+[
+  [
+    {"issuer": "did:example:A", "credentialSubject": {"id": "did:example:X"}}
+  ],
+  [
+    {"issuer": "did:example:C", "credentialSubject": {"id": "did:example:Y"}}
+  ]
+]

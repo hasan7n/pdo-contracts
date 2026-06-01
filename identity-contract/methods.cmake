@@ -51,6 +51,17 @@ SET(OPENSSL_WASM_CRYPTO_LIB ${OPENSSL_WASM_LIB_DIR}/libcrypto.a)
 SET(OPENSSL_WASM_SSL_LIB ${OPENSSL_WASM_LIB_DIR}/libssl.a)
 SET(OPENSSL_SOURCE_DIR ${PARENT_DIR}/identity-contract/src/packages/openssl)
 
+# regorus
+
+SET(REGORUS_SRC_DIR "$ENV{REGORUS_SRC}" CACHE PATH "Path to regorus source tree")
+IF(NOT REGORUS_SRC_DIR)
+  GET_FILENAME_COMPONENT(REGORUS_SRC_DIR "${PARENT_DIR}/../regorus" ABSOLUTE)
+ENDIF()
+SET(REGORUS_BUILD_DIR ${OPENSSL_BUILD_DIR})
+SET(REGORUS_WASM_INCLUDE_DIR ${REGORUS_BUILD_DIR}/precompiled/include)
+SET(REGORUS_WASM_LIB ${REGORUS_BUILD_DIR}/precompiled/lib/libregorus_ffi.a)
+SET(REGORUS_SOURCE_DIR ${PARENT_DIR}/identity-contract/src/packages/regorus)
+
 # ---------------------------------------------
 # Build the wawaka contract common library
 # ---------------------------------------------

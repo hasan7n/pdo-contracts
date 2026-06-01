@@ -4,5 +4,6 @@
 [ContractFamily.Identity]
 committee = { source = "${home}/contracts/identity/_identity_committee.b64" }
 policy_agent = { source = "${home}/contracts/identity/_identity_policy_agent.b64" }
+rego_policy_agent = { source = "${home}/contracts/identity/_identity_rego_policy_agent.b64" }
 signature_authority = { source = "${home}/contracts/identity/_identity_signature_authority.b64" }
 wallet = { source = "${home}/contracts/identity/_identity_identity.b64" }

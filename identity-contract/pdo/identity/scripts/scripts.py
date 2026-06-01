@@ -35,6 +35,11 @@ def policy_agent() :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+def rego_policy_agent() :
+    run_shell_command('do_rego_policy_agent', 'pdo.identity.plugins.rego_policy_agent')
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 def committee() :
     run_shell_command('do_committee', 'pdo.identity.plugins.committee')
 

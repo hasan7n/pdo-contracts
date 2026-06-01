@@ -13,6 +13,6 @@
 # limitations under the License.
 
 SET(CF_NAME identity)
-SET(CF_CONTRACTS committee identity signature_authority policy_agent)
+SET(CF_CONTRACTS committee identity signature_authority policy_agent rego_policy_agent)
 
 STRING(TOUPPER ${CF_NAME} CF_HANDLE)
