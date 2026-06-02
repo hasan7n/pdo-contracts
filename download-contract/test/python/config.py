@@ -11,6 +11,7 @@ required_env_vars = [
     "F_SERVICE_HOST",
     "USER_KEYS_FOLDER",
     "PDO_INSTALL_ROOT",
+    "GUARDIAN_URL",
 ]
 for var in required_env_vars:
     if var not in os.environ:
@@ -49,3 +50,4 @@ F_LOGLEVEL = os.environ.get("PDO_LOG_LEVEL", "warn")
 # CLI knobs
 # -----------------------------------------------------------------
 PREFERRED_ESERVICE_URL = os.environ.get("PREFERRED_ESERVICE_URL", "random")
+GUARDIAN_URL = os.environ["GUARDIAN_URL"]
