@@ -6,7 +6,7 @@ import pdo.download.decentralized.policy_agent as policy_agent
 import pdo.identity.decentralized.signature_authority as signature_authority
 import pdo.download.decentralized.download_token as download_token
 from state import setup_pdo_state, read_var, write_var
-from config import SCRATCH_DIR
+from config import SCRATCH_DIR, GUARDIAN_URL
 from generate_channel_key import generate_keys, generate_credential
 from read_data import read_data
 import time
@@ -15,14 +15,16 @@ import time
 issuer_user = "user1"
 asset_owner = "user2"
 asset_user = "user3"
-guardian_url = "http://localhost:7900"
-policy_data = (
-    "/home/hasan/work/pdos/pdo-contracts/download-contract/test/policy_data.json"
+guardian_url = GUARDIAN_URL
+script_dir = os.path.dirname(os.path.abspath(__file__))
+policy_data = os.path.join(script_dir, os.path.pardir, "policy_data.json")
+membership_credential_path = os.path.join(
+    script_dir, os.path.pardir, "credential_membership.json"
 )
-membership_credential_path = "/home/hasan/work/pdos/pdo-contracts/download-contract/test/credential_membership.json"
-consent_credential_path = (
-    "/home/hasan/work/pdos/pdo-contracts/download-contract/test/credential_consent.json"
+consent_credential_path = os.path.join(
+    script_dir, os.path.pardir, "credential_consent.json"
 )
+
 public_pem_file, private_pem_file = generate_keys(
     os.path.join(SCRATCH_DIR, "channel_key")
 )

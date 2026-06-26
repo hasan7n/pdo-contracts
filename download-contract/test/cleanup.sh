@@ -1,3 +1,3 @@
 SCRIPTDIR="$(dirname $(readlink --canonicalize ${BASH_SOURCE}))"
 SOURCE_ROOT="$(realpath ${SCRIPTDIR}/..)"
-rm -f ${SOURCE_ROOT}/test/*_db ${SOURCE_ROOT}/test/*-lock ${SOURCE_ROOT}/test/test_context.toml
+rm -f ${SCRIPTDIR}/*_db ${SCRIPTDIR}/*-lock ${SCRIPTDIR}/test_context.toml

@@ -9,12 +9,13 @@ from pdo.client.commands.sservice import do_sservice
 
 from config import (
     F_SERVICE_SITE_FILE,
-    LEDGER_WS,
+    LEDGER_CERT_PATH,
     PDO_HOME,
     PDO_LEDGER_KEY_ROOT,
     PREFERRED_ESERVICE_URL,
     SCRATCH_DIR,
     USER_KEYS_FOLDER,
+    SITE_TOML_SOURCE,
 )
 from state import setup_pdo_state
 
@@ -62,13 +63,10 @@ def setup_pdo_local_databases(state, bindings):
 os.makedirs(SCRATCH_DIR, exist_ok=True)
 
 os.makedirs(PDO_LEDGER_KEY_ROOT, exist_ok=True)
-shutil.copy(f"{LEDGER_WS}/ccf/keys/networkcert.pem", PDO_LEDGER_KEY_ROOT)
+shutil.copy(LEDGER_CERT_PATH, PDO_LEDGER_KEY_ROOT)
 
 os.makedirs(f"{PDO_HOME}/etc/sites", exist_ok=True)
-shutil.copy(
-    "/home/hasan/work/pdos/pdo-contracts/download-contract/test/decentralized/site.toml",
-    F_SERVICE_SITE_FILE,
-)
+shutil.copy(SITE_TOML_SOURCE, F_SERVICE_SITE_FILE)
 # shutil.copy(f"{LEDGER_WS}/services/etc/site.toml", F_SERVICE_SITE_FILE)
 
 os.makedirs(f"{PDO_HOME}/keys", exist_ok=True)

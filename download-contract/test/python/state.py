@@ -2,7 +2,6 @@ import os
 import sys
 
 from pdo.client.builder.shell import parse_shell_command_line
-import toml
 
 from config import (
     F_LOGFILE,
