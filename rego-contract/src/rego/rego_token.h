@@ -24,18 +24,13 @@
 // capability on a verifiable credential. Where download_token consumes a
 // "DownloadCredential" issued by the basic policy_agent, rego_token consumes a
 // "policy_decision" credential issued by the rego_policy_agent. The merged Rego
-// context the rego_policy_agent carries as that credential's claims supplies the
-// capability parameters (operation + channel_key), exactly like download_token.
+// context the rego_policy_agent carries as that credential's claims is handed to
+// the guardian capability verbatim -- rego_token makes no assumption about its
+// shape, so there is no fixed capability parameter schema.
 
 #define REGO_TOKEN_PARAM_SCHEMA                 \
     "{"                                         \
         SCHEMA_KWS(policy_vc, VERIFIABLE_CREDENTIAL_SCHEMA)               \
-    "}"
-
-#define REGO_TOKEN_CAPABILITY_SCHEMA            \
-    "{"                                         \
-        SCHEMA_KW(channel_key,"") ","              \
-        SCHEMA_KW(op,"")              \
     "}"
 
 namespace ww

@@ -59,7 +59,7 @@
 
 namespace ww
 {
-namespace identity
+namespace rego
 {
 namespace rego_policy_agent
 {
@@ -78,5 +78,5 @@ namespace rego_policy_agent
     bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);
 
 }; // rego_policy_agent
-}; // identity
+}; // rego
 }; // ww

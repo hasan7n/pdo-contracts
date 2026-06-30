@@ -24,7 +24,7 @@
 #include "Util.h"
 
 #include "contract/base.h"
-#include "identity/rego_evaluator.h"
+#include "rego/rego_evaluator.h"
 
 // -----------------------------------------------------------------
 // METHOD: initialize_contract
@@ -41,6 +41,6 @@ bool initialize_contract(const Environment& env, Response& rsp)
 // -----------------------------------------------------------------
 contract_method_reference_t contract_method_dispatch_table[] = {
     // evaluate arbitrary rego_source over input at entrypoint, return the output
-    CONTRACT_METHOD2(evaluate, ww::identity::rego_evaluator::evaluate),
+    CONTRACT_METHOD2(evaluate, ww::rego::rego_evaluator::evaluate),
 
     {NULL, NULL}};

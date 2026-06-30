@@ -30,10 +30,10 @@
 
 #include "contract/base.h"
 #include "identity/policy_agent.h" // inherited trusted-issuer / policy-data / verify / issue methods
-#include "identity/rego_policy_agent.h"
-#include "identity/rego_combinators.h" // hardcoded requirement / result combinator policies
+#include "rego/rego_policy_agent.h"
+#include "rego/rego_combinators.h" // hardcoded requirement / result combinator policies
 #include "identity/common/Credential.h"
-#include "identity/rego_evaluator.h" // reused eval_rego (+ the regorus allocator hooks)
+#include "rego/rego_evaluator.h" // reused eval_rego (+ the regorus allocator hooks)
 
 // -----------------------------------------------------------------
 // State
@@ -116,7 +116,7 @@ static bool compute_requirements(
         }
 
         std::string output_json;
-        if (!ww::identity::rego_evaluator::eval_rego(source, "data.subpolicy.requirements", "{}", output_json, error_msg))
+        if (!ww::rego::rego_evaluator::eval_rego(source, "data.subpolicy.requirements", "{}", output_json, error_msg))
             return false;
 
         // every subpolicy must return a requirements object (an empty {} is fine)
@@ -145,7 +145,7 @@ static bool compute_requirements(
     }
 
     std::string merged_output;
-    if (!ww::identity::rego_evaluator::eval_rego(REGO_REQUIREMENTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
+    if (!ww::rego::rego_evaluator::eval_rego(REGO_REQUIREMENTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
         return false;
 
     ww::value::Object merged;
@@ -222,7 +222,7 @@ static bool build_input_schema(
 //   REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA
 //     { "rego_modules": [ [ subpolicy_id, source ], ... ] }
 // -----------------------------------------------------------------
-bool ww::identity::rego_policy_agent::set_rego_policy(
+bool ww::rego::rego_policy_agent::set_rego_policy(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_SENDER_IS_OWNER(env, rsp);
@@ -279,7 +279,7 @@ bool ww::identity::rego_policy_agent::set_rego_policy(
 //   Return the merged per-role requirements set by set_rego_policy:
 //   { role: [ credential_type, ... ], ... }
 // -----------------------------------------------------------------
-bool ww::identity::rego_policy_agent::get_requirements(
+bool ww::rego::rego_policy_agent::get_requirements(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);
@@ -299,7 +299,7 @@ bool ww::identity::rego_policy_agent::get_requirements(
 // METHOD: get_rego_policy
 //   Return the whole list of [ subpolicy_id, source ] pairs.
 // -----------------------------------------------------------------
-bool ww::identity::rego_policy_agent::get_rego_policy(
+bool ww::rego::rego_policy_agent::get_rego_policy(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);
@@ -443,7 +443,7 @@ static bool run_subpolicies(
         }
 
         std::string output_json;
-        if (!ww::identity::rego_evaluator::eval_rego(source, "data.subpolicy.result", input_json, output_json, error_msg))
+        if (!ww::rego::rego_evaluator::eval_rego(source, "data.subpolicy.result", input_json, output_json, error_msg))
             return false;
 
         // a subpolicy must return a result of the expected shape
@@ -486,7 +486,7 @@ static bool combine_results(
     }
 
     std::string merged_output;
-    if (!ww::identity::rego_evaluator::eval_rego(REGO_RESULTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
+    if (!ww::rego::rego_evaluator::eval_rego(REGO_RESULTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
         return false;
 
     ww::value::Object merged;
@@ -607,7 +607,7 @@ static bool build_output_credential(
 //   VERIFIABLE_CREDENTIAL_SCHEMA -- a signed credential whose claims are the
 //   merged context, or an error if the policy denied.
 // -----------------------------------------------------------------
-bool ww::identity::rego_policy_agent::issue_policy_credential(
+bool ww::rego::rego_policy_agent::issue_policy_credential(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);

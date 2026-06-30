@@ -26,7 +26,7 @@
 #include "contract/base.h"
 #include "identity/identity.h"
 #include "identity/policy_agent.h"
-#include "identity/rego_policy_agent.h"
+#include "rego/rego_policy_agent.h"
 
 // -----------------------------------------------------------------
 // policy_agent specialization hook.
@@ -64,9 +64,9 @@ contract_method_reference_t contract_method_dispatch_table[] = {
     CONTRACT_METHOD2(initialize, ww::identity::identity::initialize),
 
     // set/replace the Rego modules + requirements (owner-only, repeatable), and read them back
-    CONTRACT_METHOD2(set_rego_policy, ww::identity::rego_policy_agent::set_rego_policy),
-    CONTRACT_METHOD2(get_rego_policy, ww::identity::rego_policy_agent::get_rego_policy),
-    CONTRACT_METHOD2(get_requirements, ww::identity::rego_policy_agent::get_requirements),
+    CONTRACT_METHOD2(set_rego_policy, ww::rego::rego_policy_agent::set_rego_policy),
+    CONTRACT_METHOD2(get_rego_policy, ww::rego::rego_policy_agent::get_rego_policy),
+    CONTRACT_METHOD2(get_requirements, ww::rego::rego_policy_agent::get_requirements),
 
     // trusted issuers + policy data: inherited from policy_agent, still editable
     CONTRACT_METHOD2(register_trusted_issuer, ww::identity::policy_agent::register_trusted_issuer),
@@ -75,6 +75,6 @@ contract_method_reference_t contract_method_dispatch_table[] = {
     CONTRACT_METHOD2(get_policy_data, ww::identity::policy_agent::get_policy_data),
 
     // run every subpolicy, verify the flagged credentials, and issue a decision credential
-    CONTRACT_METHOD2(issue_policy_credential, ww::identity::rego_policy_agent::issue_policy_credential),
+    CONTRACT_METHOD2(issue_policy_credential, ww::rego::rego_policy_agent::issue_policy_credential),
 
     {NULL, NULL}};

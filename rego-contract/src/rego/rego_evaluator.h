@@ -39,7 +39,7 @@
 
 namespace ww
 {
-namespace identity
+namespace rego
 {
 namespace rego_evaluator
 {
@@ -58,5 +58,5 @@ namespace rego_evaluator
     bool evaluate(const Message& msg, const Environment& env, Response& rsp);
 
 }; // rego_evaluator
-}; // identity
+}; // rego
 }; // ww

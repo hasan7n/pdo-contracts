@@ -24,7 +24,7 @@
 #include "Value.h"
 #include "WasmExtensions.h"
 
-#include "identity/rego_evaluator.h"
+#include "rego/rego_evaluator.h"
 
 extern "C"
 {
@@ -66,7 +66,7 @@ extern "C" void regorus_free(uint8_t *ptr)
 // plus one compiled module, which suits the memory-limited runtime. On failure
 // error_msg explains why.
 // -----------------------------------------------------------------
-bool ww::identity::rego_evaluator::eval_rego(
+bool ww::rego::rego_evaluator::eval_rego(
     const char *source,
     const char *entrypoint,
     const std::string &input_json,
@@ -132,7 +132,7 @@ bool ww::identity::rego_evaluator::eval_rego(
 // RETURNS:
 //   the entrypoint's output, as a JSON string (whatever the rule produced)
 // -----------------------------------------------------------------
-bool ww::identity::rego_evaluator::evaluate(
+bool ww::rego::rego_evaluator::evaluate(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_SUCCESS(rsp, msg.validate_schema(REGO_EVALUATOR_EVALUATE_PARAM_SCHEMA),
@@ -146,7 +146,7 @@ bool ww::identity::rego_evaluator::evaluate(
 
     std::string output_json;
     std::string error_msg;
-    ASSERT_SUCCESS(rsp, ww::identity::rego_evaluator::eval_rego(
+    ASSERT_SUCCESS(rsp, ww::rego::rego_evaluator::eval_rego(
                             rego_source, entrypoint, std::string(input), output_json, error_msg),
                    error_msg.c_str());
 

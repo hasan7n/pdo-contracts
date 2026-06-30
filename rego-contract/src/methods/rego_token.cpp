@@ -52,23 +52,11 @@ bool ww::rego::rego_token::do_download(
     ww::identity::VerifiableCredential vc_in;
     ASSERT_SUCCESS(rsp, ww::identity::policy_agent::verify_credential(vc_object_in, vc_in, "policy_decision"), "invalid request, ill-formed credential");
 
-    // the credential's claims are the merged Rego context; the capability
-    // parameters are carried there exactly as download_token expects them
-    const char *op = vc_in.credential_.credentialSubject_.claims_.get_string("operation");
-    const char *channel_key = vc_in.credential_.credentialSubject_.claims_.get_string("channel_key");
-
-    ASSERT_SUCCESS(rsp, op != NULL, "no operation claim");
-    ASSERT_SUCCESS(rsp, channel_key != NULL, "no channel_key claim");
-
-    ww::value::Structure params(REGO_TOKEN_CAPABILITY_SCHEMA);
-    ASSERT_SUCCESS(rsp, params.set_string("op", op),
-                   "unexpected error: failed to store operation parameter");
-
-    ASSERT_SUCCESS(rsp, params.set_string("channel_key", channel_key),
-                   "unexpected error: failed to store channel_key parameter");
-
+    // the credential's claims are the merged Rego context; hand them to the
+    // guardian capability verbatim (the policy decides their shape, not the token)
     ww::value::Object result;
-    ASSERT_SUCCESS(rsp, ww::exchange::token_object::create_operation_package("do_download", params, result),
+    ASSERT_SUCCESS(rsp, ww::exchange::token_object::create_operation_package(
+                            "do_download", vc_in.credential_.credentialSubject_.claims_, result),
                    "unexpected error: failed to generate capability");
 
     // this assumes that generating the capability does not change state, depending on
