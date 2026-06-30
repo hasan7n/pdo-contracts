@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-SET(CF_NAME identity)
-SET(CF_CONTRACTS committee identity signature_authority policy_agent)
+SET(CF_NAME rego)
+SET(CF_CONTRACTS rego_evaluator rego_policy_agent rego_token)
 
 STRING(TOUPPER ${CF_NAME} CF_HANDLE)

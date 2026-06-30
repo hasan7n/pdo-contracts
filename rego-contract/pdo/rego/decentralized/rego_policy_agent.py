@@ -1,4 +1,4 @@
-from pdo.identity.plugins.rego_policy_agent import (
+from pdo.rego.plugins.rego_policy_agent import (
     cmd_register_trusted_issuer,
     cmd_issue_policy_credential,
     cmd_set_policy_data,
@@ -16,7 +16,10 @@ import random
 import string
 import os
 
-CONTEXT_FILES = os.path.join(os.environ["PDO_HOME"], "contracts/identity/context")
+CONTEXT_FILES = os.path.join(os.environ["PDO_HOME"], "contracts/rego/context")
+IDENTITY_CONTEXT_FILES = os.path.join(
+    os.environ["PDO_HOME"], "contracts/identity/context"
+)
 
 
 def _generate_random_label(length=8):
@@ -36,7 +39,7 @@ def _setup_context(state, user, context_file=None):
 def _setup_register_issuer_context(state, user, issuer_contract_id):
     label = _generate_random_label()
     bindings = {"user": user, "identity": label}
-    context_file = os.path.join(CONTEXT_FILES, "signature_authority.toml")
+    context_file = os.path.join(IDENTITY_CONTEXT_FILES, "signature_authority.toml")
     Context.LoadContextFile(state, bindings, context_file)
     issuer_context_path = f"identity.{label}.signature_authority"
     state.set(

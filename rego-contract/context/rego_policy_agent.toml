@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------
 # identity ${identity}
 # -----------------------------------------------------------------
-[identity.${identity}.rego_evaluator]
+[identity.${identity}.rego_policy_agent]
 identity = "${user}"
-module = "pdo.identity.plugins.rego_evaluator"
-source = "${ContractFamily.Identity.rego_evaluator.source}"
+module = "pdo.rego.plugins.rego_policy_agent"
+source = "${ContractFamily.Rego.rego_policy_agent.source}"

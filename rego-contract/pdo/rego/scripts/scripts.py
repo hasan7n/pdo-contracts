@@ -15,30 +15,32 @@
 from pdo.client.builder.shell import run_shell_command
 
 import warnings
+
 warnings.catch_warnings()
 warnings.simplefilter("ignore")
 
-# -----------------------------------------------------------------
-# -----------------------------------------------------------------
-def credential() :
-    run_shell_command('do_credential', 'pdo.identity.plugins.credential')
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-def identity() :
-    run_shell_command('do_identity', 'pdo.identity.plugins.identity')
+def rego_evaluator():
+    run_shell_command("do_rego_evaluator", "pdo.rego.plugins.rego_evaluator")
+
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-def policy_agent() :
-    run_shell_command('do_policy_agent', 'pdo.identity.plugins.policy_agent')
+def rego_policy_agent():
+    run_shell_command("do_rego_policy_agent", "pdo.rego.plugins.rego_policy_agent")
+
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-def committee() :
-    run_shell_command('do_committee', 'pdo.identity.plugins.committee')
+def rego_token():
+    run_shell_command("do_rego_token", "pdo.rego.plugins.rego_token")
+
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
-def signature_authority() :
-    run_shell_command('do_signature_authority', 'pdo.identity.plugins.signature_authority')
+def rego_guardian():
+    run_shell_command(
+        "do_guardian_service", "pdo.contracts.guardian.plugins.guardian_service"
+    )

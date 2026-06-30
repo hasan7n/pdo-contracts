@@ -15,13 +15,19 @@
 # limitations under the License.
 
 # -----------------------------------------------------------------
+# End-to-end CLI test for the rego_policy_agent (subpolicy + combinator flow).
+#
+# It creates a credential holder (wallet), a signature authority (trusted
+# issuer), and a rego_policy_agent; provisions two subpolicies; then issues a
+# policy credential whose claims are the merged subpolicy context.
+# -----------------------------------------------------------------
+
+# -----------------------------------------------------------------
 # -----------------------------------------------------------------
 : "${PDO_LEDGER_URL?Missing environment variable PDO_LEDGER_URL}"
 : "${PDO_HOME?Missing environment variable PDO_HOME}"
 : "${PDO_SOURCE_ROOT?Missing environment variable PDO_SOURCE_ROOT}"
 
-# -----------------------------------------------------------------
-# -----------------------------------------------------------------
 source ${PDO_HOME}/bin/lib/common.sh
 check_python_version
 
@@ -30,8 +36,6 @@ if ! command -v pdo-shell &> /dev/null ; then
     exit 1
 fi
 
-# -----------------------------------------------------------------
-# -----------------------------------------------------------------
 if [ "${PDO_LEDGER_TYPE}" == "ccf" ]; then
     if [ ! -f "${PDO_LEDGER_KEY_ROOT}/networkcert.pem" ]; then
         die "CCF ledger keys are missing, please copy and try again"
@@ -49,8 +53,9 @@ F_SERVICE_HOST=${PDO_HOSTNAME}
 F_LEDGER_URL=${PDO_LEDGER_URL}
 F_LOGLEVEL=${PDO_LOG_LEVEL:-info}
 F_LOGFILE=${PDO_LOG_FILE:-__screen__}
-F_CONTEXT_FILE=${SOURCE_ROOT}/test/rego_test_context.toml
-F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/identity/context
+F_CONTEXT_FILE=${SOURCE_ROOT}/test/subpolicy_test_context.toml
+F_CONTEXT_TEMPLATES=${PDO_HOME}/contracts/rego/context
+F_IDENTITY_TEMPLATES=${PDO_HOME}/contracts/identity/context
 F_PREFERRED=http://localhost:7101
 
 F_USAGE='--host service-host | --ledger url | --loglevel [debug|info|warn] | --logfile file | --preferred [host]'
@@ -80,8 +85,8 @@ if [ ! -f ${F_SERVICE_SITE_FILE} ] ; then
         please copy the site.toml file from the service host
 fi
 
-F_SERVICE_GROUPS_DB_FILE=${SOURCE_ROOT}/test/${F_SERVICE_HOST}_rego_groups_db
-F_SERVICE_DB_FILE=${SOURCE_ROOT}/test/${F_SERVICE_HOST}_rego_db
+F_SERVICE_GROUPS_DB_FILE=${SOURCE_ROOT}/test/${F_SERVICE_HOST}_subpolicy_groups_db
+F_SERVICE_DB_FILE=${SOURCE_ROOT}/test/${F_SERVICE_HOST}_subpolicy_db
 
 _COMMON_=("--logfile ${F_LOGFILE}" "--loglevel ${F_LOGLEVEL}")
 _COMMON_+=("--ledger ${F_LEDGER_URL}")
@@ -106,7 +111,7 @@ for i in 1 2 3 ; do
     fi
 done
 
-TEST_ROOT=$(mktemp -d /tmp/rego_test.XXXXXXXXX)
+TEST_ROOT=$(mktemp -d /tmp/subpolicy_test.XXXXXXXXX)
 
 # -----------------------------------------------------------------
 function cleanup {
@@ -131,48 +136,93 @@ try pdo-sservice create_from_site ${SHORT_OPTS} --file ${F_SERVICE_SITE_FILE} --
              --replicas 1 --duration 60
 
 # -----------------------------------------------------------------
-# setup the context for the rego_evaluator
+# setup the contexts used below
 # -----------------------------------------------------------------
 cd "${SOURCE_ROOT}"
 rm -f ${F_CONTEXT_FILE}
 
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_evaluator.toml \
-    --bind identity retest --bind user user1
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/identity.toml \
+    --bind identity idtest --bind user user1
+
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
+    --bind identity satest --bind user user2
+
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_policy_agent.toml \
+    --bind identity rptest --bind user user3
 
 # -----------------------------------------------------------------
-# Test data: an arbitrary Rego policy + two arbitrary inputs
+# Test data: the sample subpolicies (both require role "applicant" -> "dummy")
 # -----------------------------------------------------------------
-F_POLICY_FILE=${SCRIPTDIR}/policies/vc_relations.rego
-F_INPUT_CROSS=${SCRIPTDIR}/policies/vc_input_crosslinked.json
-F_INPUT_ISO=${SCRIPTDIR}/policies/vc_input_isolated.json
+F_SUBPOLICY_A=${SCRIPTDIR}/subpolicies/subpolicy_a.rego
+F_SUBPOLICY_B=${SCRIPTDIR}/subpolicies/subpolicy_b.rego
 
 # =================================================================
-yell create the rego_evaluator contract
-try id_rego_evaluator create ${OPTS} --contract identity.retest.rego_evaluator
+yell create the credential holder (wallet)
+try id_wallet create ${OPTS} --contract identity.idtest.wallet -d 'idtest identity'
+try id_wallet register ${OPTS} --contract identity.idtest.wallet \
+    -d 'fixed key idtest.fixed' --fixed --path idtest fixed
+try id_wallet register ${OPTS} --contract identity.idtest.wallet \
+    -d 'extended key idtest.ext1' --extensible --path idtest ext1
 
 # =================================================================
-yell evaluate crosslinked input, expect true
-F_RESULT_CROSS=$(id_rego_evaluator evaluate ${OPTS} \
-    --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.crosslinked")
-say "crosslinked result: ${F_RESULT_CROSS}"
-if [[ "${F_RESULT_CROSS}" != *"True"* && "${F_RESULT_CROSS}" != *"true"* ]] ; then
-    die "expected crosslinked=true for ${F_INPUT_CROSS}, got: ${F_RESULT_CROSS}"
+yell create the signature authority (the trusted issuer)
+try id_signature_authority create ${OPTS} --contract identity.satest.signature_authority \
+    -d 'satest signature authority'
+try id_signature_authority register ${OPTS} --contract identity.satest.signature_authority \
+    -d 'extended key satest.ext1' --extensible --path satest ext1
+
+yell sign the "dummy" credential with the signature authority
+try id_signature_authority sign_credential ${OPTS} --contract identity.satest.signature_authority \
+    --path satest ext1 --credential ${SCRIPTDIR}/credential1.json \
+    --signed-credential ${TEST_ROOT}/sa_credential1.json
+
+yell store the signed credential in the holder wallet
+try id_wallet add_vc ${OPTS} --contract identity.idtest.wallet \
+    --credential ${TEST_ROOT}/sa_credential1.json
+
+# =================================================================
+yell create the rego policy agent
+try rego_policy_agent create ${OPTS} --contract identity.rptest.rego_policy_agent \
+    -d 'rptest rego policy agent'
+
+yell register the signature authority as a trusted issuer for type "dummy"
+try rego_policy_agent register ${OPTS} --contract identity.rptest.rego_policy_agent \
+    --issuer identity.satest.signature_authority --path satest ext1 --credential-types dummy
+
+yell set the rego policy (subpolicy_a + subpolicy_b)
+try rego_policy_agent set_rego_policy ${OPTS} --contract identity.rptest.rego_policy_agent \
+    --module subpolicy_a ${F_SUBPOLICY_A} \
+    --module subpolicy_b ${F_SUBPOLICY_B}
+
+yell fetch the stored policy
+try rego_policy_agent get_rego_policy ${OPTS} --contract identity.rptest.rego_policy_agent
+
+yell fetch the merged requirements (expect role "applicant" -> [dummy])
+F_REQUIREMENTS=$(rego_policy_agent get_requirements ${OPTS} \
+    --contract identity.rptest.rego_policy_agent)
+say "merged requirements: ${F_REQUIREMENTS}"
+if [[ "${F_REQUIREMENTS}" != *"applicant"* || "${F_REQUIREMENTS}" != *"dummy"* ]] ; then
+    die "expected merged requirements to contain role 'applicant' and type 'dummy', got: ${F_REQUIREMENTS}"
 fi
 
-yell evaluate isolated input, expect false
-F_RESULT_ISO=$(id_rego_evaluator evaluate ${OPTS} \
-    --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_ISO} --entrypoint "data.policy.crosslinked")
-say "isolated result: ${F_RESULT_ISO}"
-if [[ "${F_RESULT_ISO}" != *"False"* && "${F_RESULT_ISO}" != *"false"* ]] ; then
-    die "expected crosslinked=false for ${F_INPUT_ISO}, got: ${F_RESULT_ISO}"
-fi
+# =================================================================
+yell build a verifiable presentation for the "dummy" credential
+try id_wallet get_vp ${OPTS} --contract identity.idtest.wallet \
+    --types dummy --file ${TEST_ROOT}/vp1.json
 
-yell list crosslinks for crosslinked input
-try id_rego_evaluator evaluate ${OPTS} \
-    --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.links"
+# wrap the presentation under the required role: { "applicant": <VP> }
+echo "{\"applicant\": $(cat ${TEST_ROOT}/vp1.json)}" > ${TEST_ROOT}/presentation.json
+
+yell issue the policy credential (claims = merged subpolicy context)
+try rego_policy_agent issue_credential ${OPTS} --contract identity.rptest.rego_policy_agent \
+    --presentation ${TEST_ROOT}/presentation.json \
+    --issued-credential ${TEST_ROOT}/rp_credential.json
+
+say issued policy credential is:
+say $(<${TEST_ROOT}/rp_credential.json)
+
+yell extract the issued credential (claims should carry the merged context)
+try id_credential extract --signed-credential ${TEST_ROOT}/rp_credential.json
 
 # =================================================================
-yell All rego_evaluator tests passed
+yell All rego_policy_agent subpolicy tests passed
