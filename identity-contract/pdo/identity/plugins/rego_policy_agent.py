@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import logging
 
 from pdo.contract import invocation_request
@@ -63,6 +62,7 @@ op_list_trusted_issuers = policy_agent_plugin.op_list_trusted_issuers
 op_set_policy_data = policy_agent_plugin.op_set_policy_data
 op_get_policy_data = policy_agent_plugin.op_get_policy_data
 op_get_requirements = policy_agent_plugin.op_get_requirements
+op_issue_policy_credential = policy_agent_plugin.op_issue_policy_credential
 
 cmd_register_trusted_issuer = policy_agent_plugin.cmd_register_trusted_issuer
 cmd_list_trusted_issuers = policy_agent_plugin.cmd_list_trusted_issuers
@@ -70,6 +70,7 @@ cmd_set_policy_data = policy_agent_plugin.cmd_set_policy_data
 cmd_get_policy_data = policy_agent_plugin.cmd_get_policy_data
 cmd_get_requirements = policy_agent_plugin.cmd_get_requirements
 cmd_create_rego_policy_agent = policy_agent_plugin.cmd_create_policy_agent
+cmd_issue_policy_credential = policy_agent_plugin.cmd_issue_policy_credential
 
 
 # -----------------------------------------------------------------
@@ -116,37 +117,6 @@ class op_get_rego_policy(pcontract.contract_op_base):
     def invoke(cls, state, session_params, **kwargs):
         session_params["commit"] = False
         message = invocation_request("get_rego_policy")
-        result = pcontract_cmd.send_to_contract(state, message, **session_params)
-        cls.log_invocation(message, result)
-        return result
-
-
-# -----------------------------------------------------------------
-# op_issue_policy_credential
-#   Run the policy over role-keyed presentations. The contract runs each DUO,
-#   merges their results, and -- if the policy allows -- verifies the flagged
-#   credentials and returns a signed credential whose claims are the merged
-#   context.
-# -----------------------------------------------------------------
-class op_issue_policy_credential(pcontract.contract_op_base):
-    name = "issue_policy_credential"
-    help = "run the configured policy against role-keyed presentations and issue a credential"
-
-    @classmethod
-    def add_arguments(cls, subparser):
-        subparser.add_argument(
-            "--presentations",
-            help="JSON object mapping role -> verifiable presentation",
-            type=pbuilder.invocation_parameter,
-            required=True,
-        )
-
-    @classmethod
-    def invoke(cls, state, session_params, presentations, **kwargs):
-        session_params["commit"] = False
-        message = invocation_request(
-            "issue_policy_credential", presentations=presentations
-        )
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
         cls.log_invocation(message, result)
         return result
@@ -218,46 +188,6 @@ class cmd_get_rego_policy(pcommand.contract_command_base):
         session = pbuilder.SessionParameters(save_file=save_file)
         result = pcontract.invoke_contract_op(
             op_get_rego_policy, state, context, session, **kwargs
-        )
-        cls.display(result)
-        return result
-
-
-# -----------------------------------------------------------------
-# cmd_issue_policy_credential
-# -----------------------------------------------------------------
-class cmd_issue_policy_credential(pcommand.contract_command_base):
-    name = "issue_policy_credential"
-    help = "run the configured policy against role-keyed presentations and issue a credential"
-
-    @classmethod
-    def add_arguments(cls, subparser):
-        subparser.add_argument(
-            "--presentations",
-            help="JSON file mapping role -> verifiable presentation",
-            type=str,
-            required=True,
-        )
-
-    @classmethod
-    def invoke(cls, state, context, presentations, **kwargs):
-        save_file = pcontract_cmd.get_contract_from_context(state, context)
-        if not save_file:
-            raise ValueError(
-                "rego policy agent contract must be created and initialized"
-            )
-
-        with open(presentations, "r") as fp:
-            presentations_value = json.load(fp)
-
-        session = pbuilder.SessionParameters(save_file=save_file)
-        result = pcontract.invoke_contract_op(
-            op_issue_policy_credential,
-            state,
-            context,
-            session,
-            presentations=presentations_value,
-            **kwargs,
         )
         cls.display(result)
         return result

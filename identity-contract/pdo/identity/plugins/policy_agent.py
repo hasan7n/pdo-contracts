@@ -23,8 +23,6 @@ import pdo.client.builder.contract as pcontract
 import pdo.client.builder.shell as pshell
 import pdo.client.commands.contract as pcontract_cmd
 
-import pdo.common.crypto as pcrypto
-
 import pdo.identity.plugins.identity as identity_plugin
 import pdo.identity.plugins.signature_authority as signature_plugin
 

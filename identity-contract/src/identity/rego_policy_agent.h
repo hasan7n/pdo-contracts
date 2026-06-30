@@ -34,12 +34,14 @@
 #define REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA \
     "{" SCHEMA_KW(rego_modules, []) "}"
 
-// issue_policy_credential: supply the presentations to judge as an object keyed
-// by role, { role: <verifiable presentation>, ... }. The detailed shape (which
-// roles, each value a verifiable presentation) is checked against the schema
-// that set_rego_policy stored, so this top-level schema only requires an object.
+// issue_policy_credential: supply the presentations to judge under the
+// "presentation" keyword (singular, so this can share the inherited policy_agent
+// issue op) as an object keyed by role, { role: <verifiable presentation>, ... }.
+// The detailed shape (which roles, each value a verifiable presentation) is
+// checked against the schema that set_rego_policy stored, so this top-level
+// schema only requires an object.
 #define REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA \
-    "{" SCHEMA_KW(presentations, {}) "}"
+    "{" SCHEMA_KW(presentation, {}) "}"
 
 // Schemas for the two rules every DUO must expose. The contract validates a
 // DUO's output against the matching schema before using it.

@@ -686,8 +686,10 @@ static bool build_output_credential(
 //
 // JSON PARAMETERS:
 //   REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA
-//     { "presentations": { role: <verifiable presentation>, ... } }
-//   The presentations are also validated against the per-role schema stored by
+//     { "presentation": { role: <verifiable presentation>, ... } }
+//   The keyword is "presentation" (singular) so this method can share the
+//   inherited policy_agent issue op; its value is the role -> verifiable
+//   presentation map. It is also validated against the per-role schema stored by
 //   set_rego_policy (required roles present, each value a verifiable presentation).
 //
 // RETURNS:
@@ -699,11 +701,11 @@ bool ww::identity::rego_policy_agent::issue_policy_credential(
 {
     ASSERT_INITIALIZED(rsp);
     ASSERT_SUCCESS(rsp, msg.validate_schema(REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA),
-                   "invalid request, missing 'presentations'");
+                   "invalid request, missing 'presentation'");
 
     ww::value::Object presentations;
-    ASSERT_SUCCESS(rsp, msg.get_value("presentations", presentations),
-                   "invalid request, missing presentations");
+    ASSERT_SUCCESS(rsp, msg.get_value("presentation", presentations),
+                   "invalid request, missing presentation");
 
     // ---------- validate against the stored input schema ----------
     std::string serialized_schema;
