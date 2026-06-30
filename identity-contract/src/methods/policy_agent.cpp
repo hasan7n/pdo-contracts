@@ -48,8 +48,10 @@ const std::string initial_policy_data("{}");
 // -----------------------------------------------------------------
 // UTILITY: load the trusted_issuers map from policy_metadata_store.
 // Map shape: { <issuer_id>: [ { verifying_context, credential_types }, ... ] }
+// Exposed (see policy_agent.h) so inheriting contracts -- e.g. rego_policy_agent
+// -- can read the same map instead of re-fetching the store themselves.
 // -----------------------------------------------------------------
-static bool get_trusted_issuers_map(ww::value::Object &trusted_issuers)
+bool ww::identity::policy_agent::get_trusted_issuers_map(ww::value::Object &trusted_issuers)
 {
     std::string str;
     ERROR_IF_NOT(policy_metadata_store.get(md_trusted_issuers, str),

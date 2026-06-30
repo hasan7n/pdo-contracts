@@ -22,14 +22,24 @@
 #include "Response.h"
 #include "Util.h"
 
-#define REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA \
-    "{" SCHEMA_KW(policy, "") "}"
+// The contract initialization hook, the trusted-issuer methods, and the
+// policy-data methods are all inherited from ww::identity::policy_agent
+// (registered directly in the dispatch table); only the Rego-specific methods
+// are declared here.
 
-// Only `rule` has a fixed shape (string). `input` may be any JSON value
-// (object, array, scalar) so it is checked for presence separately rather
-// than via schema validation.
+// set_rego_policy: set (or replace) the Rego policy -- a list of
+// [ duo_id, source ] pairs. May be called any number of times; each call
+// replaces the whole policy. The method derives and stores the per-role
+// requirements and the evaluate() input schema from the DUOs themselves.
+#define REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA \
+    "{" SCHEMA_KW(rego_modules, []) "}"
+
+// evaluate: supply the presentations to judge as an object keyed by role,
+// { role: <verifiable presentation>, ... }. The detailed shape (which roles,
+// each value a verifiable presentation) is checked against the schema that
+// set_rego_policy stored, so this top-level schema only requires an object.
 #define REGO_POLICY_AGENT_EVALUATE_PARAM_SCHEMA \
-    "{" SCHEMA_KW(rule, "") "}"
+    "{" SCHEMA_KW(presentations, {}) "}"
 
 namespace ww
 {
@@ -37,10 +47,17 @@ namespace identity
 {
 namespace rego_policy_agent
 {
-    bool initialize_contract(const Environment& env);
-
+    // set (or replace) the Rego modules and the per-role credential requirements
     bool set_rego_policy(const Message& msg, const Environment& env, Response& rsp);
+
+    // read a module's source (optional "duo_id"; otherwise the whole map)
     bool get_rego_policy(const Message& msg, const Environment& env, Response& rsp);
+
+    // return the per-role credential requirements set by set_rego_policy
+    bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
+
+    // evaluate every provisioned module, then perform the verification tasks the
+    // Rego returns and issue a signed decision credential
     bool evaluate(const Message& msg, const Environment& env, Response& rsp);
 
 }; // rego_policy_agent
