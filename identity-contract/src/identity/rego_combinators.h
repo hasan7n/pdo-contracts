@@ -60,7 +60,7 @@ result := {
 //                                "context": { ... } }, ... ] }
 //   output (data.combine.result):
 //           { "decision": bool,                    # true only if every DUO allowed
-//             "verification_tasks": [ ... ],        # all tasks concatenated
+//             "verification_tasks": [ { "index": n }, ... ],  # deduplicated by index
 //             "context": { ... } }                  # all contexts merged
 static const char REGO_RESULTS_COMBINATOR[] = R"REGO(
 package combine
@@ -75,11 +75,14 @@ decision if {
     }
 }
 
-# concatenate every DUO's verification tasks
-verification_tasks := [task |
+# the set of credential indices any DUO flagged for verification
+task_indices := {task.index |
     some o in input.duo_outputs
     some task in object.get(o, "verification_tasks", [])
-]
+}
+
+# one task per unique index (already deduplicated)
+verification_tasks := [{"index": index} | some index in task_indices]
 
 # merge every DUO's context into a single object
 context := object.union_n([ctx |

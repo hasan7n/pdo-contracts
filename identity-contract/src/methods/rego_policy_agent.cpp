@@ -17,7 +17,6 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include <set>
 
 #include "Dispatch.h"
 #include "KeyValue.h"
@@ -89,19 +88,22 @@ static KeyValueStore policy_metadata_store("policy_metadata_store");
 // -----------------------------------------------------------------
 // DUO module contract
 //   Every DUO source MUST declare both rules below in `package duo` (regorus
-//   errors on an unknown rule path, so neither may be omitted):
+//   errors on an unknown rule path, so neither may be omitted), and each must
+//   evaluate to output matching its schema (REGO_DUO_REQUIREMENTS_SCHEMA /
+//   REGO_DUO_RESULT_SCHEMA) -- the contract validates the output before using it.
 //
 //   data.duo.requirements -> { role: [credential_type, ...], ... }
 //       The roles/credential-types this DUO needs. Evaluated by set_rego_policy
-//       with input = { policy_data }, so it must not depend on the presented
-//       credentials. May legitimately evaluate to undefined (treated as {}).
+//       with NO input, so it must be static (it must produce an object even if
+//       it is just {}; an empty requirement set is fine).
 //
 //   data.duo.result -> { "decision": bool,
 //                        "verification_tasks": [ { "index": <number> }, ... ],
 //                        "context": { ... } }
-//       Evaluated by evaluate() with input = { presentations, trusted_issuers,
-//       policy_data }. `index` refers to a credential in input.presentations;
-//       the contract verifies each flagged credential's signature in C++.
+//       Evaluated by issue_policy_credential() with input = { presentations,
+//       trusted_issuers, policy_data }. `index` refers to a credential in
+//       input.presentations; the contract verifies each flagged credential's
+//       signature in C++.
 // -----------------------------------------------------------------
 
 // =================================================================
@@ -175,32 +177,16 @@ static bool eval_rego(
 // -----------------------------------------------------------------
 // Ask every DUO for the credentials it requires (its "data.duo.requirements"
 // rule), then merge them with the requirements combinator. Returns the merged
-// requirements ({ role: [credential_type, ...] }) and the list of roles.
+// requirements ({ role: [credential_type, ...] }) and the list of roles. Every
+// DUO must return a requirements object (possibly empty); otherwise it errors.
 // -----------------------------------------------------------------
 static bool compute_requirements(
     const ww::value::Array &modules,
-    const std::string &policy_data_str,
     ww::value::Object &merged_requirements,
     ww::value::Array &roles,
     std::string &error_msg)
 {
-    // the requirements rule may consult the policy data, so make it available
-    ww::value::Object policy_data;
-    if (!policy_data.deserialize(policy_data_str.c_str()))
-    {
-        error_msg.assign("unexpected error, failed to parse policy data");
-        return false;
-    }
-    ww::value::Object req_input_obj;
-    req_input_obj.set_value("policy_data", policy_data);
-    std::string req_input;
-    if (!req_input_obj.serialize(req_input))
-    {
-        error_msg.assign("unexpected error, failed to serialize requirements input");
-        return false;
-    }
-
-    // collect each DUO's declared requirements
+    // collect each DUO's declared requirements (the rule takes no input)
     ww::value::Array duo_requirements;
     const size_t count = modules.get_count();
     for (size_t i = 0; i < count; i++)
@@ -219,13 +205,16 @@ static bool compute_requirements(
         }
 
         std::string output_json;
-        if (!eval_rego(source, "data.duo.requirements", req_input, output_json, error_msg))
+        if (!eval_rego(source, "data.duo.requirements", "{}", output_json, error_msg))
             return false;
 
-        // a DUO that declares nothing is allowed; treat empty output as {}
+        // every DUO must return a requirements object (an empty {} is fine)
         ww::value::Object req;
-        if (!req.deserialize(output_json.c_str()))
-            req.deserialize("{}");
+        if (!req.deserialize(output_json.c_str()) || !req.validate_schema(REGO_DUO_REQUIREMENTS_SCHEMA))
+        {
+            error_msg.assign("invalid request, a DUO returned ill-formed requirements");
+            return false;
+        }
 
         if (!duo_requirements.append_value(req))
         {
@@ -337,16 +326,11 @@ bool ww::identity::rego_policy_agent::set_rego_policy(
     ASSERT_SUCCESS(rsp, modules.get_count() > 0,
                    "invalid request, rego_modules must not be empty");
 
-    // the requirements evaluation may consult the current policy data
-    std::string policy_data_str;
-    ASSERT_SUCCESS(rsp, policy_metadata_store.get("policy_data", policy_data_str),
-                   "unexpected error, failed to fetch policy data");
-
     // derive the merged requirements and the roles from the DUOs
     ww::value::Object merged_requirements;
     ww::value::Array roles;
     std::string error_msg;
-    ASSERT_SUCCESS(rsp, compute_requirements(modules, policy_data_str, merged_requirements, roles, error_msg),
+    ASSERT_SUCCESS(rsp, compute_requirements(modules, merged_requirements, roles, error_msg),
                    error_msg.c_str());
 
     // build the evaluate() input schema from those roles
@@ -402,8 +386,7 @@ bool ww::identity::rego_policy_agent::get_requirements(
 
 // -----------------------------------------------------------------
 // METHOD: get_rego_policy
-//   Return one module's source (optional "duo_id") or the whole list of
-//   [ duo_id, source ] pairs.
+//   Return the whole list of [ duo_id, source ] pairs.
 // -----------------------------------------------------------------
 bool ww::identity::rego_policy_agent::get_rego_policy(
     const Message &msg, const Environment &env, Response &rsp)
@@ -417,26 +400,6 @@ bool ww::identity::rego_policy_agent::get_rego_policy(
     ww::value::Array modules;
     ASSERT_SUCCESS(rsp, modules.deserialize(serialized_modules.c_str()),
                    "unexpected error, failed to deserialize rego modules");
-
-    const char *duo_id = msg.get_string("duo_id");
-    if (duo_id != nullptr && duo_id[0] != '\0')
-    {
-        // scan the pairs for the requested duo_id and return its source
-        const size_t count = modules.get_count();
-        for (size_t i = 0; i < count; i++)
-        {
-            ww::value::Array pair;
-            if (!modules.get_value(i, pair))
-                continue;
-            const char *id = pair.get_string(0);
-            if (id != nullptr && std::string(id) == duo_id)
-            {
-                ww::value::String out(pair.get_string(1));
-                return rsp.value(out, false);
-            }
-        }
-        return rsp.error("invalid request, unknown duo_id");
-    }
 
     return rsp.value(modules, false);
 }
@@ -572,10 +535,11 @@ static bool run_duos(
         if (!eval_rego(source, "data.duo.result", input_json, output_json, error_msg))
             return false;
 
+        // a DUO must return a result of the expected shape
         ww::value::Object result;
-        if (!result.deserialize(output_json.c_str()))
+        if (!result.deserialize(output_json.c_str()) || !result.validate_schema(REGO_DUO_RESULT_SCHEMA))
         {
-            error_msg.assign("unexpected error, failed to parse module result");
+            error_msg.assign("unexpected error, a DUO returned an ill-formed result");
             return false;
         }
         if (!duo_outputs.append_value(result))
@@ -637,30 +601,24 @@ static bool combine_results(
 }
 
 // -----------------------------------------------------------------
-// Cryptographically check each credential the merged result flagged. Tasks are
-// deduped by the credential's global index. The credential type comes from the
-// credential itself (trusted), not from the task. any_failed is set if even one
-// flagged credential fails to verify.
+// Cryptographically check each credential the merged result flagged. The merged
+// tasks are already deduplicated by the results combinator. The credential type
+// comes from the credential itself (trusted), not from the task. Returns true
+// only if every flagged credential verifies, returning false at the first one
+// that does not.
 // -----------------------------------------------------------------
 static bool perform_verification_tasks(
     const ww::value::Array &verification_tasks,
-    const std::vector<std::string> &vc_json_by_index,
-    bool &any_failed)
+    const std::vector<std::string> &vc_json_by_index)
 {
-    std::set<int> indices;
     const size_t count = verification_tasks.get_count();
     for (size_t i = 0; i < count; i++)
     {
         ww::value::Object task;
         if (!verification_tasks.get_value(i, task))
-            continue;
-        indices.insert((int)task.get_number("index"));
-    }
+            return false; // malformed task -- cannot verify, so deny
 
-    any_failed = false;
-    for (std::set<int>::const_iterator it = indices.begin(); it != indices.end(); ++it)
-    {
-        const int index = *it;
+        const int index = (int)task.get_number("index");
 
         bool verified = false;
         if (index >= 0 && (size_t)index < vc_json_by_index.size())
@@ -680,7 +638,7 @@ static bool perform_verification_tasks(
         }
 
         if (!verified)
-            any_failed = true;
+            return false; // fail-safe: stop at the first failed verification
     }
 
     return true;
@@ -720,14 +678,14 @@ static bool build_output_credential(
 }
 
 // -----------------------------------------------------------------
-// METHOD: evaluate
+// METHOD: issue_policy_credential
 //   Standardize the caller's presentations, run every DUO, merge their results
-//   with the results combinator, verify the credentials the merged result
-//   flags, and -- if the policy allows -- issue a signed credential whose claims
-//   are the merged context.
+//   with the results combinator, and -- if the policy allows -- verify the
+//   credentials the merged result flags and issue a signed credential whose
+//   claims are the merged context.
 //
 // JSON PARAMETERS:
-//   REGO_POLICY_AGENT_EVALUATE_PARAM_SCHEMA
+//   REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA
 //     { "presentations": { role: <verifiable presentation>, ... } }
 //   The presentations are also validated against the per-role schema stored by
 //   set_rego_policy (required roles present, each value a verifiable presentation).
@@ -736,11 +694,11 @@ static bool build_output_credential(
 //   VERIFIABLE_CREDENTIAL_SCHEMA -- a signed credential whose claims are the
 //   merged context, or an error if the policy denied.
 // -----------------------------------------------------------------
-bool ww::identity::rego_policy_agent::evaluate(
+bool ww::identity::rego_policy_agent::issue_policy_credential(
     const Message &msg, const Environment &env, Response &rsp)
 {
     ASSERT_INITIALIZED(rsp);
-    ASSERT_SUCCESS(rsp, msg.validate_schema(REGO_POLICY_AGENT_EVALUATE_PARAM_SCHEMA),
+    ASSERT_SUCCESS(rsp, msg.validate_schema(REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA),
                    "invalid request, missing 'presentations'");
 
     ww::value::Object presentations;
@@ -789,15 +747,14 @@ bool ww::identity::rego_policy_agent::evaluate(
     ASSERT_SUCCESS(rsp, combine_results(duo_outputs, decision, verification_tasks, context, error_msg),
                    error_msg.c_str());
 
-    // ---------- verify the credentials the merged result flagged ----------
-    bool any_failed = false;
-    ASSERT_SUCCESS(rsp, perform_verification_tasks(verification_tasks, vc_json_by_index, any_failed),
-                   "unexpected error, failed to verify the flagged credentials");
+    // if any DUO denied, stop here -- there is no point verifying signatures
+    ASSERT_SUCCESS(rsp, decision, "policy evaluation denied");
 
-    // the policy passes only if every DUO allowed AND every flagged signature
-    // verified (the C++ verifier is trusted; the Rego ran over unverified claims)
-    ASSERT_SUCCESS(rsp, decision && !any_failed,
-                   "policy evaluation denied");
+    // ---------- verify the credentials the merged result flagged ----------
+    // the C++ verifier is trusted; the Rego ran over as-yet-unverified claims, so
+    // a single failed signature is fail-safe and denies the request
+    ASSERT_SUCCESS(rsp, perform_verification_tasks(verification_tasks, vc_json_by_index),
+                   "policy evaluation denied, credential verification failed");
 
     // ---------- issue the signed credential ----------
     ww::value::Object serialized_vc_out;

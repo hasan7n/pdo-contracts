@@ -30,16 +30,30 @@
 // set_rego_policy: set (or replace) the Rego policy -- a list of
 // [ duo_id, source ] pairs. May be called any number of times; each call
 // replaces the whole policy. The method derives and stores the per-role
-// requirements and the evaluate() input schema from the DUOs themselves.
+// requirements and the issue_policy_credential() input schema from the DUOs.
 #define REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA \
     "{" SCHEMA_KW(rego_modules, []) "}"
 
-// evaluate: supply the presentations to judge as an object keyed by role,
-// { role: <verifiable presentation>, ... }. The detailed shape (which roles,
-// each value a verifiable presentation) is checked against the schema that
-// set_rego_policy stored, so this top-level schema only requires an object.
-#define REGO_POLICY_AGENT_EVALUATE_PARAM_SCHEMA \
+// issue_policy_credential: supply the presentations to judge as an object keyed
+// by role, { role: <verifiable presentation>, ... }. The detailed shape (which
+// roles, each value a verifiable presentation) is checked against the schema
+// that set_rego_policy stored, so this top-level schema only requires an object.
+#define REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA \
     "{" SCHEMA_KW(presentations, {}) "}"
+
+// Schemas for the two rules every DUO must expose. The contract validates a
+// DUO's output against the matching schema before using it.
+//   data.duo.requirements -> { role: [credential_type, ...], ... }
+// (roles are arbitrary keys, so the schema can only require an object)
+#define REGO_DUO_REQUIREMENTS_SCHEMA "{}"
+
+//   data.duo.result -> { decision, verification_tasks, context }
+#define REGO_DUO_RESULT_SCHEMA                                          \
+    "{"                                                                 \
+        SCHEMA_KW(decision, true) ","                                   \
+        SCHEMA_KWS(verification_tasks, "[{" SCHEMA_KW(index, 0) "}]") ","\
+        SCHEMA_KW(context, {})                                         \
+    "}"
 
 namespace ww
 {
@@ -47,18 +61,19 @@ namespace identity
 {
 namespace rego_policy_agent
 {
-    // set (or replace) the Rego modules and the per-role credential requirements
+    // set (or replace) the Rego policy (a list of [ duo_id, source ] pairs)
     bool set_rego_policy(const Message& msg, const Environment& env, Response& rsp);
 
-    // read a module's source (optional "duo_id"; otherwise the whole map)
+    // return the whole list of [ duo_id, source ] pairs
     bool get_rego_policy(const Message& msg, const Environment& env, Response& rsp);
 
-    // return the per-role credential requirements set by set_rego_policy
+    // return the merged per-role credential requirements set by set_rego_policy
     bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
 
-    // evaluate every provisioned module, then perform the verification tasks the
-    // Rego returns and issue a signed decision credential
-    bool evaluate(const Message& msg, const Environment& env, Response& rsp);
+    // run every DUO, merge the results, verify the flagged credentials, and --
+    // if the policy allows -- issue a signed credential whose claims are the
+    // merged context
+    bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);
 
 }; // rego_policy_agent
 }; // identity
