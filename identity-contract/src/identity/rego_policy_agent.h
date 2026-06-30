@@ -28,9 +28,9 @@
 // are declared here.
 
 // set_rego_policy: set (or replace) the Rego policy -- a list of
-// [ duo_id, source ] pairs. May be called any number of times; each call
+// [ subpolicy_id, source ] pairs. May be called any number of times; each call
 // replaces the whole policy. The method derives and stores the per-role
-// requirements and the issue_policy_credential() input schema from the DUOs.
+// requirements and the issue_policy_credential() input schema from the subpolicies.
 #define REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA \
     "{" SCHEMA_KW(rego_modules, []) "}"
 
@@ -43,14 +43,14 @@
 #define REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA \
     "{" SCHEMA_KW(presentation, {}) "}"
 
-// Schemas for the two rules every DUO must expose. The contract validates a
-// DUO's output against the matching schema before using it.
-//   data.duo.requirements -> { role: [credential_type, ...], ... }
+// Schemas for the two rules every subpolicy must expose. The contract validates a
+// subpolicy's output against the matching schema before using it.
+//   data.subpolicy.requirements -> { role: [credential_type, ...], ... }
 // (roles are arbitrary keys, so the schema can only require an object)
-#define REGO_DUO_REQUIREMENTS_SCHEMA "{}"
+#define REGO_SUBPOLICY_REQUIREMENTS_SCHEMA "{}"
 
-//   data.duo.result -> { decision, verification_tasks, context }
-#define REGO_DUO_RESULT_SCHEMA                                          \
+//   data.subpolicy.result -> { decision, verification_tasks, context }
+#define REGO_SUBPOLICY_RESULT_SCHEMA                                          \
     "{"                                                                 \
         SCHEMA_KW(decision, true) ","                                   \
         SCHEMA_KWS(verification_tasks, "[{" SCHEMA_KW(index, 0) "}]") ","\
@@ -63,16 +63,16 @@ namespace identity
 {
 namespace rego_policy_agent
 {
-    // set (or replace) the Rego policy (a list of [ duo_id, source ] pairs)
+    // set (or replace) the Rego policy (a list of [ subpolicy_id, source ] pairs)
     bool set_rego_policy(const Message& msg, const Environment& env, Response& rsp);
 
-    // return the whole list of [ duo_id, source ] pairs
+    // return the whole list of [ subpolicy_id, source ] pairs
     bool get_rego_policy(const Message& msg, const Environment& env, Response& rsp);
 
     // return the merged per-role credential requirements set by set_rego_policy
     bool get_requirements(const Message& msg, const Environment& env, Response& rsp);
 
-    // run every DUO, merge the results, verify the flagged credentials, and --
+    // run every subpolicy, merge the results, verify the flagged credentials, and --
     // if the policy allows -- issue a signed credential whose claims are the
     // merged context
     bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);

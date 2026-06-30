@@ -75,19 +75,19 @@ cmd_issue_policy_credential = policy_agent_plugin.cmd_issue_policy_credential
 
 # -----------------------------------------------------------------
 # op_set_rego_policy
-#   Set (or replace) the Rego policy: a list of [duo_id, source] pairs. The
+#   Set (or replace) the Rego policy: a list of [subpolicy_id, source] pairs. The
 #   contract derives and stores the per-role requirements and input schema from
-#   the DUOs. May be called any number of times; each call replaces the policy.
+#   the subpolicies. May be called any number of times; each call replaces the policy.
 # -----------------------------------------------------------------
 class op_set_rego_policy(pcontract.contract_op_base):
     name = "set_rego_policy"
-    help = "set or replace the Rego policy (a list of [duo_id, source] pairs)"
+    help = "set or replace the Rego policy (a list of [subpolicy_id, source] pairs)"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
             "--rego-modules",
-            help="list of [duo_id, source] pairs, as JSON",
+            help="list of [subpolicy_id, source] pairs, as JSON",
             type=pbuilder.invocation_parameter,
             required=True,
         )
@@ -103,11 +103,11 @@ class op_set_rego_policy(pcontract.contract_op_base):
 
 # -----------------------------------------------------------------
 # op_get_rego_policy
-#   Fetch the whole list of [duo_id, source] pairs.
+#   Fetch the whole list of [subpolicy_id, source] pairs.
 # -----------------------------------------------------------------
 class op_get_rego_policy(pcontract.contract_op_base):
     name = "get_rego_policy"
-    help = "fetch the whole list of [duo_id, source] pairs"
+    help = "fetch the whole list of [subpolicy_id, source] pairs"
 
     @classmethod
     def add_arguments(cls, subparser):
@@ -126,17 +126,18 @@ class op_get_rego_policy(pcontract.contract_op_base):
 # cmd_set_rego_policy
 # -----------------------------------------------------------------
 class cmd_set_rego_policy(pcommand.contract_command_base):
-    name = "set_policy"
-    help = "set or replace the Rego policy (a list of [duo_id, source] pairs)"
+    # distinct from the inherited policy_agent "set_policy" (which sets policy DATA)
+    name = "set_rego_policy"
+    help = "set or replace the Rego policy (a list of [subpolicy_id, source] pairs)"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
             "--module",
-            help="a duo id and the path to its Rego source file (repeatable)",
+            help="a subpolicy id and the path to its Rego source file (repeatable)",
             nargs=2,
             action="append",
-            metavar=("DUO_ID", "FILE"),
+            metavar=("SUBPOLICY_ID", "FILE"),
             required=True,
         )
 
@@ -149,9 +150,9 @@ class cmd_set_rego_policy(pcommand.contract_command_base):
             )
 
         rego_modules = []
-        for duo_id, path in module:
+        for subpolicy_id, path in module:
             with open(path, "r") as fp:
-                rego_modules.append([duo_id, fp.read()])
+                rego_modules.append([subpolicy_id, fp.read()])
 
         session = pbuilder.SessionParameters(save_file=save_file)
         result = pcontract.invoke_contract_op(
@@ -170,8 +171,9 @@ class cmd_set_rego_policy(pcommand.contract_command_base):
 # cmd_get_rego_policy
 # -----------------------------------------------------------------
 class cmd_get_rego_policy(pcommand.contract_command_base):
-    name = "get_policy"
-    help = "fetch the whole list of [duo_id, source] pairs"
+    # distinct from the inherited policy_agent "get_policy" (which gets policy DATA)
+    name = "get_rego_policy"
+    help = "fetch the whole list of [subpolicy_id, source] pairs"
 
     @classmethod
     def add_arguments(cls, subparser):

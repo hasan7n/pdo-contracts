@@ -67,14 +67,14 @@ extern "C" void regorus_free(uint8_t *ptr)
 // -----------------------------------------------------------------
 // State
 //   rego_policy_store : this contract's own state. set_rego_policy fills it:
-//     "rego_modules"  -- [ [ duo_id, source ], ... ]
-//     "roles"         -- [ role, ... ]                  (derived from the DUOs)
+//     "rego_modules"  -- [ [ subpolicy_id, source ], ... ]
+//     "roles"         -- [ role, ... ]                  (derived from the subpolicies)
 //     "input_schema"  -- { role: <verifiable presentation schema>, ... }
 //   policy_metadata_store : the SAME store the inherited policy_agent methods
 //     use. We read "policy_data" / "trusted_issuers" for the Rego input, and
 //     write the merged "requirements" there so get_requirements can return them.
 //
-// Every DUO and both combinators run in their OWN regorus engine (see
+// Every subpolicy and both combinators run in their OWN regorus engine (see
 // eval_rego), so the fixed module name and entrypoints never collide.
 // -----------------------------------------------------------------
 static KeyValueStore rego_policy_store("rego_policy_store");
@@ -86,18 +86,18 @@ static KeyValueStore policy_metadata_store("policy_metadata_store");
 // policy-data store, and the trusted-issuers map.
 
 // -----------------------------------------------------------------
-// DUO module contract
-//   Every DUO source MUST declare both rules below in `package duo` (regorus
+// subpolicy module contract
+//   Every subpolicy source MUST declare both rules below in `package subpolicy` (regorus
 //   errors on an unknown rule path, so neither may be omitted), and each must
-//   evaluate to output matching its schema (REGO_DUO_REQUIREMENTS_SCHEMA /
-//   REGO_DUO_RESULT_SCHEMA) -- the contract validates the output before using it.
+//   evaluate to output matching its schema (REGO_SUBPOLICY_REQUIREMENTS_SCHEMA /
+//   REGO_SUBPOLICY_RESULT_SCHEMA) -- the contract validates the output before using it.
 //
-//   data.duo.requirements -> { role: [credential_type, ...], ... }
-//       The roles/credential-types this DUO needs. Evaluated by set_rego_policy
+//   data.subpolicy.requirements -> { role: [credential_type, ...], ... }
+//       The roles/credential-types this subpolicy needs. Evaluated by set_rego_policy
 //       with NO input, so it must be static (it must produce an object even if
 //       it is just {}; an empty requirement set is fine).
 //
-//   data.duo.result -> { "decision": bool,
+//   data.subpolicy.result -> { "decision": bool,
 //                        "verification_tasks": [ { "index": <number> }, ... ],
 //                        "context": { ... } }
 //       Evaluated by issue_policy_credential() with input = { presentations,
@@ -175,10 +175,10 @@ static bool eval_rego(
 // =================================================================
 
 // -----------------------------------------------------------------
-// Ask every DUO for the credentials it requires (its "data.duo.requirements"
+// Ask every subpolicy for the credentials it requires (its "data.subpolicy.requirements"
 // rule), then merge them with the requirements combinator. Returns the merged
 // requirements ({ role: [credential_type, ...] }) and the list of roles. Every
-// DUO must return a requirements object (possibly empty); otherwise it errors.
+// subpolicy must return a requirements object (possibly empty); otherwise it errors.
 // -----------------------------------------------------------------
 static bool compute_requirements(
     const ww::value::Array &modules,
@@ -186,8 +186,8 @@ static bool compute_requirements(
     ww::value::Array &roles,
     std::string &error_msg)
 {
-    // collect each DUO's declared requirements (the rule takes no input)
-    ww::value::Array duo_requirements;
+    // collect each subpolicy's declared requirements (the rule takes no input)
+    ww::value::Array subpolicy_requirements;
     const size_t count = modules.get_count();
     for (size_t i = 0; i < count; i++)
     {
@@ -205,27 +205,27 @@ static bool compute_requirements(
         }
 
         std::string output_json;
-        if (!eval_rego(source, "data.duo.requirements", "{}", output_json, error_msg))
+        if (!eval_rego(source, "data.subpolicy.requirements", "{}", output_json, error_msg))
             return false;
 
-        // every DUO must return a requirements object (an empty {} is fine)
+        // every subpolicy must return a requirements object (an empty {} is fine)
         ww::value::Object req;
-        if (!req.deserialize(output_json.c_str()) || !req.validate_schema(REGO_DUO_REQUIREMENTS_SCHEMA))
+        if (!req.deserialize(output_json.c_str()) || !req.validate_schema(REGO_SUBPOLICY_REQUIREMENTS_SCHEMA))
         {
-            error_msg.assign("invalid request, a DUO returned ill-formed requirements");
+            error_msg.assign("invalid request, a subpolicy returned ill-formed requirements");
             return false;
         }
 
-        if (!duo_requirements.append_value(req))
+        if (!subpolicy_requirements.append_value(req))
         {
-            error_msg.assign("unexpected error, failed to collect duo requirements");
+            error_msg.assign("unexpected error, failed to collect subpolicy requirements");
             return false;
         }
     }
 
     // merge them with the requirements combinator
     ww::value::Object combinator_input_obj;
-    combinator_input_obj.set_value("duo_requirements", duo_requirements);
+    combinator_input_obj.set_value("subpolicy_requirements", subpolicy_requirements);
     std::string combinator_input;
     if (!combinator_input_obj.serialize(combinator_input))
     {
@@ -299,17 +299,17 @@ static bool build_input_schema(
 
 // -----------------------------------------------------------------
 // METHOD: set_rego_policy
-//   Set (or replace) the Rego policy: a list of [ duo_id, source ] pairs. The
+//   Set (or replace) the Rego policy: a list of [ subpolicy_id, source ] pairs. The
 //   owner may call this any number of times; each call fully replaces the
 //   previous policy (the modules are NOT locked).
 //
-//   The method also derives the per-role requirements (by invoking each DUO's
+//   The method also derives the per-role requirements (by invoking each subpolicy's
 //   requirements rule and merging them with the requirements combinator) and
 //   the matching input schema, then stores all of it.
 //
 // JSON PARAMETERS:
 //   REGO_POLICY_AGENT_SET_POLICY_PARAM_SCHEMA
-//     { "rego_modules": [ [ duo_id, source ], ... ] }
+//     { "rego_modules": [ [ subpolicy_id, source ], ... ] }
 // -----------------------------------------------------------------
 bool ww::identity::rego_policy_agent::set_rego_policy(
     const Message &msg, const Environment &env, Response &rsp)
@@ -326,7 +326,7 @@ bool ww::identity::rego_policy_agent::set_rego_policy(
     ASSERT_SUCCESS(rsp, modules.get_count() > 0,
                    "invalid request, rego_modules must not be empty");
 
-    // derive the merged requirements and the roles from the DUOs
+    // derive the merged requirements and the roles from the subpolicies
     ww::value::Object merged_requirements;
     ww::value::Array roles;
     std::string error_msg;
@@ -386,7 +386,7 @@ bool ww::identity::rego_policy_agent::get_requirements(
 
 // -----------------------------------------------------------------
 // METHOD: get_rego_policy
-//   Return the whole list of [ duo_id, source ] pairs.
+//   Return the whole list of [ subpolicy_id, source ] pairs.
 // -----------------------------------------------------------------
 bool ww::identity::rego_policy_agent::get_rego_policy(
     const Message &msg, const Environment &env, Response &rsp)
@@ -409,7 +409,7 @@ bool ww::identity::rego_policy_agent::get_rego_policy(
 // =================================================================
 
 // -----------------------------------------------------------------
-// Standardize the caller's presentations into the shared DUO input:
+// Standardize the caller's presentations into the shared subpolicy input:
 //   input.presentations = { role: [ { type, issuer, subject, claims, index }, ... ], ... }
 //   input.trusted_issuers = { issuer_id: [ { verifying_context, credential_types }, ... ] }
 //   input.policy_data   = <opaque policy data>
@@ -505,14 +505,14 @@ static bool build_rego_input(
 }
 
 // -----------------------------------------------------------------
-// Run every DUO over the shared input and collect their result objects.
+// Run every subpolicy over the shared input and collect their result objects.
 // Each result is { decision, verification_tasks, context }. On failure
 // error_msg explains why.
 // -----------------------------------------------------------------
-static bool run_duos(
+static bool run_subpolicies(
     const ww::value::Array &modules,
     const std::string &input_json,
-    ww::value::Array &duo_outputs,
+    ww::value::Array &subpolicy_outputs,
     std::string &error_msg)
 {
     const size_t count = modules.get_count();
@@ -532,17 +532,17 @@ static bool run_duos(
         }
 
         std::string output_json;
-        if (!eval_rego(source, "data.duo.result", input_json, output_json, error_msg))
+        if (!eval_rego(source, "data.subpolicy.result", input_json, output_json, error_msg))
             return false;
 
-        // a DUO must return a result of the expected shape
+        // a subpolicy must return a result of the expected shape
         ww::value::Object result;
-        if (!result.deserialize(output_json.c_str()) || !result.validate_schema(REGO_DUO_RESULT_SCHEMA))
+        if (!result.deserialize(output_json.c_str()) || !result.validate_schema(REGO_SUBPOLICY_RESULT_SCHEMA))
         {
-            error_msg.assign("unexpected error, a DUO returned an ill-formed result");
+            error_msg.assign("unexpected error, a subpolicy returned an ill-formed result");
             return false;
         }
-        if (!duo_outputs.append_value(result))
+        if (!subpolicy_outputs.append_value(result))
         {
             error_msg.assign("unexpected error, failed to collect module result");
             return false;
@@ -552,21 +552,21 @@ static bool run_duos(
 }
 
 // -----------------------------------------------------------------
-// Merge the per-DUO outputs with the results combinator:
-//   - decision           : true only if every DUO allowed
-//   - verification_tasks  : every DUO's tasks concatenated
-//   - context             : every DUO's context merged into one object
+// Merge the per-subpolicy outputs with the results combinator:
+//   - decision           : true only if every subpolicy allowed
+//   - verification_tasks  : every subpolicy's tasks concatenated
+//   - context             : every subpolicy's context merged into one object
 // On failure error_msg explains why.
 // -----------------------------------------------------------------
 static bool combine_results(
-    const ww::value::Array &duo_outputs,
+    const ww::value::Array &subpolicy_outputs,
     bool &decision,
     ww::value::Array &verification_tasks,
     ww::value::Object &context,
     std::string &error_msg)
 {
     ww::value::Object combinator_input_obj;
-    combinator_input_obj.set_value("duo_outputs", duo_outputs);
+    combinator_input_obj.set_value("subpolicy_outputs", subpolicy_outputs);
     std::string combinator_input;
     if (!combinator_input_obj.serialize(combinator_input))
     {
@@ -679,7 +679,7 @@ static bool build_output_credential(
 
 // -----------------------------------------------------------------
 // METHOD: issue_policy_credential
-//   Standardize the caller's presentations, run every DUO, merge their results
+//   Standardize the caller's presentations, run every subpolicy, merge their results
 //   with the results combinator, and -- if the policy allows -- verify the
 //   credentials the merged result flags and issue a signed credential whose
 //   claims are the merged context.
@@ -737,19 +737,19 @@ bool ww::identity::rego_policy_agent::issue_policy_credential(
     ASSERT_SUCCESS(rsp, build_rego_input(presentations, roles, input_json, vc_json_by_index),
                    "invalid request, failed to build the rego input");
 
-    // ---------- run every DUO, then merge their outputs ----------
+    // ---------- run every subpolicy, then merge their outputs ----------
     std::string error_msg;
-    ww::value::Array duo_outputs;
-    ASSERT_SUCCESS(rsp, run_duos(modules, input_json, duo_outputs, error_msg),
+    ww::value::Array subpolicy_outputs;
+    ASSERT_SUCCESS(rsp, run_subpolicies(modules, input_json, subpolicy_outputs, error_msg),
                    error_msg.c_str());
 
     bool decision = false;
     ww::value::Array verification_tasks;
     ww::value::Object context;
-    ASSERT_SUCCESS(rsp, combine_results(duo_outputs, decision, verification_tasks, context, error_msg),
+    ASSERT_SUCCESS(rsp, combine_results(subpolicy_outputs, decision, verification_tasks, context, error_msg),
                    error_msg.c_str());
 
-    // if any DUO denied, stop here -- there is no point verifying signatures
+    // if any subpolicy denied, stop here -- there is no point verifying signatures
     ASSERT_SUCCESS(rsp, decision, "policy evaluation denied");
 
     // ---------- verify the credentials the merged result flagged ----------

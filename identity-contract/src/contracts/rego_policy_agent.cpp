@@ -74,7 +74,7 @@ contract_method_reference_t contract_method_dispatch_table[] = {
     CONTRACT_METHOD2(set_policy_data, ww::identity::policy_agent::set_policy_data),
     CONTRACT_METHOD2(get_policy_data, ww::identity::policy_agent::get_policy_data),
 
-    // run every DUO, verify the flagged credentials, and issue a decision credential
+    // run every subpolicy, verify the flagged credentials, and issue a decision credential
     CONTRACT_METHOD2(issue_policy_credential, ww::identity::rego_policy_agent::issue_policy_credential),
 
     {NULL, NULL}};

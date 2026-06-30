@@ -1,1 +1,1 @@
-__all__ = ["identity", "policy_agent", "signature_authority"]
+__all__ = ["identity", "policy_agent", "rego_policy_agent", "signature_authority"]
