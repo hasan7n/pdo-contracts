@@ -3,6 +3,24 @@ INCLUDE(identity-contract/methods)
 INCLUDE(methods.cmake)
 
 # -----------------------------------------------------------------
+# Build the Rego engine (regorus) for WebAssembly. Only the rego family uses it,
+# so the build target lives here; openssl_wasm is still owned by identity-contract.
+# -----------------------------------------------------------------
+ADD_CUSTOM_COMMAND(
+  OUTPUT ${REGORUS_WASM_LIB} ${REGORUS_WASM_INCLUDE_DIR}/regorus/regorus.h
+  COMMAND ${REGORUS_SOURCE_DIR}/build.sh
+  ARGS -o ${REGORUS_BUILD_DIR}/precompiled -s ${REGORUS_SRC_DIR}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  DEPENDS ${REGORUS_SOURCE_DIR}/build.sh
+  COMMENT "Building regorus for WebAssembly"
+)
+
+ADD_CUSTOM_TARGET(
+  regorus_wasm
+  DEPENDS ${REGORUS_WASM_LIB} ${REGORUS_WASM_INCLUDE_DIR}/regorus/regorus.h
+)
+
+# -----------------------------------------------------------------
 ADD_LIBRARY(${${CF_HANDLE}_LIB} STATIC ${${CF_HANDLE}_SOURCES})
 SET_PROPERTY(TARGET ${${CF_HANDLE}_LIB} APPEND_STRING PROPERTY COMPILE_OPTIONS "${WASM_BUILD_OPTIONS}" "-Wno-deprecated")
 SET_PROPERTY(TARGET ${${CF_HANDLE}_LIB} APPEND_STRING PROPERTY LINK_OPTIONS "${WASM_LINK_OPTIONS}")

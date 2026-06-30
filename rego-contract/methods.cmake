@@ -27,6 +27,21 @@ LIST(APPEND ${CF_HANDLE}_SOURCES ${${CF_HANDLE}_COMMON_SOURCE})
 LIST(APPEND ${CF_HANDLE}_SOURCES ${${CF_HANDLE}_CONTRACT_SOURCE})
 
 # ---------------------------------------------
+# regorus (the Rego engine; only the rego family needs it, so it is built here
+# rather than in identity-contract)
+# ---------------------------------------------
+GET_FILENAME_COMPONENT(PARENT_DIR ${CMAKE_CURRENT_LIST_DIR} DIRECTORY)
+
+SET(REGORUS_SRC_DIR "$ENV{REGORUS_SRC}" CACHE PATH "Path to regorus source tree")
+IF(NOT REGORUS_SRC_DIR)
+  GET_FILENAME_COMPONENT(REGORUS_SRC_DIR "${PARENT_DIR}/../regorus" ABSOLUTE)
+ENDIF()
+SET(REGORUS_BUILD_DIR ${CMAKE_CURRENT_LIST_DIR}/build)
+SET(REGORUS_WASM_INCLUDE_DIR ${REGORUS_BUILD_DIR}/precompiled/include)
+SET(REGORUS_WASM_LIB ${REGORUS_BUILD_DIR}/precompiled/lib/libregorus_ffi.a)
+SET(REGORUS_SOURCE_DIR ${CMAKE_CURRENT_LIST_DIR}/src/packages/regorus)
+
+# ---------------------------------------------
 # Build the wawaka contract common library
 # ---------------------------------------------
 SET(${CF_HANDLE}_LIB ww_${CF_NAME})
