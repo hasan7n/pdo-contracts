@@ -23,50 +23,90 @@ import pdo.client.builder.contract as pcontract
 import pdo.client.builder.shell as pshell
 import pdo.client.commands.contract as pcontract_cmd
 
+import pdo.identity.plugins.policy_agent as policy_agent_plugin
+
 __all__ = [
-    'op_set_rego_policy',
-    'op_get_rego_policy',
-    'op_evaluate',
-    'cmd_create_rego_policy_agent',
-    'cmd_set_rego_policy',
-    'cmd_get_rego_policy',
-    'cmd_evaluate',
-    'do_rego_policy_agent',
-    'do_rego_policy_agent_contract',
-    'load_commands',
+    "op_initialize",
+    "op_set_rego_policy",
+    "op_get_rego_policy",
+    "op_get_requirements",
+    "op_register_trusted_issuer",
+    "op_list_trusted_issuers",
+    "op_set_policy_data",
+    "op_get_policy_data",
+    "op_issue_policy_credential",
+    "cmd_create_rego_policy_agent",
+    "cmd_set_rego_policy",
+    "cmd_get_rego_policy",
+    "cmd_get_requirements",
+    "cmd_register_trusted_issuer",
+    "cmd_list_trusted_issuers",
+    "cmd_set_policy_data",
+    "cmd_get_policy_data",
+    "cmd_issue_policy_credential",
+    "do_rego_policy_agent",
+    "do_rego_policy_agent_contract",
+    "load_commands",
 ]
 
 logger = logging.getLogger(__name__)
 
+# -----------------------------------------------------------------
+# Inherited from the policy_agent plugin -- the initialize, trusted-issuer, and
+# policy-data methods are identical here (this contract reuses those C++
+# methods). initialize just marks the contract ready; the Rego modules are set
+# separately by set_rego_policy.
+# -----------------------------------------------------------------
+op_initialize = policy_agent_plugin.op_initialize
+op_register_trusted_issuer = policy_agent_plugin.op_register_trusted_issuer
+op_list_trusted_issuers = policy_agent_plugin.op_list_trusted_issuers
+op_set_policy_data = policy_agent_plugin.op_set_policy_data
+op_get_policy_data = policy_agent_plugin.op_get_policy_data
+op_get_requirements = policy_agent_plugin.op_get_requirements
+
+cmd_register_trusted_issuer = policy_agent_plugin.cmd_register_trusted_issuer
+cmd_list_trusted_issuers = policy_agent_plugin.cmd_list_trusted_issuers
+cmd_set_policy_data = policy_agent_plugin.cmd_set_policy_data
+cmd_get_policy_data = policy_agent_plugin.cmd_get_policy_data
+cmd_get_requirements = policy_agent_plugin.cmd_get_requirements
+cmd_create_rego_policy_agent = policy_agent_plugin.cmd_create_policy_agent
+
 
 # -----------------------------------------------------------------
+# op_set_rego_policy
+#   Set (or replace) the Rego policy: a list of [duo_id, source] pairs. The
+#   contract derives and stores the per-role requirements and input schema from
+#   the DUOs. May be called any number of times; each call replaces the policy.
+# -----------------------------------------------------------------
 class op_set_rego_policy(pcontract.contract_op_base):
-
     name = "set_rego_policy"
-    help = "store a Rego policy in the contract"
+    help = "set or replace the Rego policy (a list of [duo_id, source] pairs)"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
-            '-p', '--policy',
-            help='Rego policy text',
-            type=str,
-            required=True)
+            "--rego-modules",
+            help="list of [duo_id, source] pairs, as JSON",
+            type=pbuilder.invocation_parameter,
+            required=True,
+        )
 
     @classmethod
-    def invoke(cls, state, session_params, policy, **kwargs):
-        session_params['commit'] = True
-        message = invocation_request('set_rego_policy', policy=policy)
+    def invoke(cls, state, session_params, rego_modules, **kwargs):
+        session_params["commit"] = True
+        message = invocation_request("set_rego_policy", rego_modules=rego_modules)
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
         cls.log_invocation(message, result)
         return result
 
 
 # -----------------------------------------------------------------
+# op_get_rego_policy
+#   Fetch the whole list of [duo_id, source] pairs.
+# -----------------------------------------------------------------
 class op_get_rego_policy(pcontract.contract_op_base):
-
     name = "get_rego_policy"
-    help = "fetch the stored Rego policy"
+    help = "fetch the whole list of [duo_id, source] pairs"
 
     @classmethod
     def add_arguments(cls, subparser):
@@ -74,106 +114,94 @@ class op_get_rego_policy(pcontract.contract_op_base):
 
     @classmethod
     def invoke(cls, state, session_params, **kwargs):
-        session_params['commit'] = False
-        message = invocation_request('get_rego_policy')
+        session_params["commit"] = False
+        message = invocation_request("get_rego_policy")
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
         cls.log_invocation(message, result)
         return result
 
 
 # -----------------------------------------------------------------
-class op_evaluate(pcontract.contract_op_base):
-
-    name = "evaluate"
-    help = "evaluate the stored Rego policy against input"
+# op_issue_policy_credential
+#   Run the policy over role-keyed presentations. The contract runs each DUO,
+#   merges their results, and -- if the policy allows -- verifies the flagged
+#   credentials and returns a signed credential whose claims are the merged
+#   context.
+# -----------------------------------------------------------------
+class op_issue_policy_credential(pcontract.contract_op_base):
+    name = "issue_policy_credential"
+    help = "run the configured policy against role-keyed presentations and issue a credential"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
-            '-i', '--input',
-            help='Input value (JSON)',
+            "--presentations",
+            help="JSON object mapping role -> verifiable presentation",
             type=pbuilder.invocation_parameter,
-            required=True)
-        subparser.add_argument(
-            '-r', '--rule',
-            help='Rego rule path (e.g. data.policy.allow)',
-            type=str,
-            required=True)
+            required=True,
+        )
 
     @classmethod
-    def invoke(cls, state, session_params, input, rule, **kwargs):
-        session_params['commit'] = False
-        # the contract expects `input` as a JSON document encoded in a string
-        if not isinstance(input, str):
-            input = json.dumps(input)
-        message = invocation_request('evaluate', input=input, rule=rule)
+    def invoke(cls, state, session_params, presentations, **kwargs):
+        session_params["commit"] = False
+        message = invocation_request(
+            "issue_policy_credential", presentations=presentations
+        )
         result = pcontract_cmd.send_to_contract(state, message, **session_params)
         cls.log_invocation(message, result)
         return result
 
 
 # -----------------------------------------------------------------
-class cmd_create_rego_policy_agent(pcommand.contract_command_base):
-    name = "create"
-    help = "create and initialize a Rego policy agent contract"
-
-    @classmethod
-    def add_arguments(cls, subparser):
-        subparser.add_argument('-c', '--contract-class', type=str)
-        subparser.add_argument('-e', '--eservice-group', type=str)
-        subparser.add_argument('-f', '--save-file', type=str)
-        subparser.add_argument('-p', '--pservice-group', type=str)
-        subparser.add_argument('-r', '--sservice-group', type=str)
-        subparser.add_argument('--source', type=str)
-        subparser.add_argument('--extra', nargs=2, action='append')
-
-    @classmethod
-    def invoke(cls, state, context, **kwargs):
-        save_file = pcontract_cmd.get_contract_from_context(state, context)
-        if save_file:
-            return save_file
-
-        save_file = pcontract_cmd.create_contract_from_context(
-            state, context, 'rego_policy_agent', **kwargs)
-        context['save_file'] = save_file
-
-        cls.display('created rego_policy_agent in {}'.format(save_file))
-        return save_file
-
-
+# cmd_set_rego_policy
 # -----------------------------------------------------------------
 class cmd_set_rego_policy(pcommand.contract_command_base):
     name = "set_policy"
-    help = "load a Rego policy file into the contract"
+    help = "set or replace the Rego policy (a list of [duo_id, source] pairs)"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
-            '--file',
-            help='Rego policy file',
-            type=str,
-            required=True)
+            "--module",
+            help="a duo id and the path to its Rego source file (repeatable)",
+            nargs=2,
+            action="append",
+            metavar=("DUO_ID", "FILE"),
+            required=True,
+        )
 
     @classmethod
-    def invoke(cls, state, context, file, **kwargs):
+    def invoke(cls, state, context, module, **kwargs):
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if not save_file:
-            raise ValueError('rego_policy_agent contract must be created and initialized')
+            raise ValueError(
+                "rego policy agent contract must be created and initialized"
+            )
 
-        with open(file, 'r') as fp:
-            policy_text = fp.read()
+        rego_modules = []
+        for duo_id, path in module:
+            with open(path, "r") as fp:
+                rego_modules.append([duo_id, fp.read()])
 
         session = pbuilder.SessionParameters(save_file=save_file)
-        pcontract.invoke_contract_op(
-            op_set_rego_policy, state, context, session, policy=policy_text, **kwargs)
-        cls.display('policy loaded from {}'.format(file))
-        return True
+        result = pcontract.invoke_contract_op(
+            op_set_rego_policy,
+            state,
+            context,
+            session,
+            rego_modules=rego_modules,
+            **kwargs,
+        )
+        cls.display(result)
+        return result
 
 
 # -----------------------------------------------------------------
+# cmd_get_rego_policy
+# -----------------------------------------------------------------
 class cmd_get_rego_policy(pcommand.contract_command_base):
     name = "get_policy"
-    help = "fetch the stored Rego policy"
+    help = "fetch the whole list of [duo_id, source] pairs"
 
     @classmethod
     def add_arguments(cls, subparser):
@@ -183,70 +211,97 @@ class cmd_get_rego_policy(pcommand.contract_command_base):
     def invoke(cls, state, context, **kwargs):
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if not save_file:
-            raise ValueError('rego_policy_agent contract must be created and initialized')
+            raise ValueError(
+                "rego policy agent contract must be created and initialized"
+            )
 
         session = pbuilder.SessionParameters(save_file=save_file)
         result = pcontract.invoke_contract_op(
-            op_get_rego_policy, state, context, session, **kwargs)
+            op_get_rego_policy, state, context, session, **kwargs
+        )
         cls.display(result)
         return result
 
 
 # -----------------------------------------------------------------
-class cmd_evaluate(pcommand.contract_command_base):
-    name = "evaluate"
-    help = "evaluate the stored policy against an input"
+# cmd_issue_policy_credential
+# -----------------------------------------------------------------
+class cmd_issue_policy_credential(pcommand.contract_command_base):
+    name = "issue_policy_credential"
+    help = "run the configured policy against role-keyed presentations and issue a credential"
 
     @classmethod
     def add_arguments(cls, subparser):
         subparser.add_argument(
-            '--input',
-            help='Input file containing JSON',
+            "--presentations",
+            help="JSON file mapping role -> verifiable presentation",
             type=str,
-            required=True)
-        subparser.add_argument(
-            '--rule',
-            help='Rego rule path',
-            type=str,
-            required=True)
+            required=True,
+        )
 
     @classmethod
-    def invoke(cls, state, context, input, rule, **kwargs):
+    def invoke(cls, state, context, presentations, **kwargs):
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if not save_file:
-            raise ValueError('rego_policy_agent contract must be created and initialized')
+            raise ValueError(
+                "rego policy agent contract must be created and initialized"
+            )
 
-        with open(input, 'r') as fp:
-            input_value = json.load(fp)
+        with open(presentations, "r") as fp:
+            presentations_value = json.load(fp)
 
         session = pbuilder.SessionParameters(save_file=save_file)
         result = pcontract.invoke_contract_op(
-            op_evaluate, state, context, session,
-            input=input_value, rule=rule, **kwargs)
+            op_issue_policy_credential,
+            state,
+            context,
+            session,
+            presentations=presentations_value,
+            **kwargs,
+        )
         cls.display(result)
         return result
 
 
 # -----------------------------------------------------------------
+# Create the generic, shell independent version of the aggregate command
+# -----------------------------------------------------------------
 __operations__ = [
+    op_initialize,
     op_set_rego_policy,
     op_get_rego_policy,
-    op_evaluate,
+    op_get_requirements,
+    op_register_trusted_issuer,
+    op_list_trusted_issuers,
+    op_set_policy_data,
+    op_get_policy_data,
+    op_issue_policy_credential,
 ]
 
 do_rego_policy_agent_contract = pcontract.create_shell_command(
-    'rego_policy_agent_contract', __operations__)
+    "rego_policy_agent_contract", __operations__
+)
 
 __commands__ = [
     cmd_create_rego_policy_agent,
     cmd_set_rego_policy,
     cmd_get_rego_policy,
-    cmd_evaluate,
+    cmd_get_requirements,
+    cmd_register_trusted_issuer,
+    cmd_list_trusted_issuers,
+    cmd_set_policy_data,
+    cmd_get_policy_data,
+    cmd_issue_policy_credential,
 ]
 
-do_rego_policy_agent = pcommand.create_shell_command('rego_policy_agent', __commands__)
+do_rego_policy_agent = pcommand.create_shell_command("rego_policy_agent", __commands__)
 
 
+# -----------------------------------------------------------------
+# Enable binding of the shell independent version to a pdo-shell command
+# -----------------------------------------------------------------
 def load_commands(cmdclass):
-    pshell.bind_shell_command(cmdclass, 'rego_policy_agent', do_rego_policy_agent)
-    pshell.bind_shell_command(cmdclass, 'rego_policy_agent_contract', do_rego_policy_agent_contract)
+    pshell.bind_shell_command(cmdclass, "rego_policy_agent", do_rego_policy_agent)
+    pshell.bind_shell_command(
+        cmdclass, "rego_policy_agent_contract", do_rego_policy_agent_contract
+    )
