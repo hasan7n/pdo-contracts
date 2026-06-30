@@ -40,6 +40,11 @@ def rego_policy_agent() :
 
 # -----------------------------------------------------------------
 # -----------------------------------------------------------------
+def rego_evaluator() :
+    run_shell_command('do_rego_evaluator', 'pdo.identity.plugins.rego_evaluator')
+
+# -----------------------------------------------------------------
+# -----------------------------------------------------------------
 def committee() :
     run_shell_command('do_committee', 'pdo.identity.plugins.committee')
 

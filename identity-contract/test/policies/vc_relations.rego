@@ -1,8 +1,9 @@
-# Sample policy for the rego_policy_agent smoke test.
+# Sample policy for the rego_evaluator smoke test. It exercises the evaluator's
+# only job: run an arbitrary Rego policy over an arbitrary input at an arbitrary
+# entrypoint (here data.policy.crosslinked / data.policy.links).
 #
-# Input shape: a list of lists of (already signature-verified) verifiable
-# credentials. Each VC is an object with at least `issuer` and
-# `credentialSubject.id` fields.
+# Input shape: a list of lists of verifiable credentials. Each VC is an object
+# with at least `issuer` and `credentialSubject.id` fields.
 #
 # `crosslinked` is true if there exist two distinct VCs (in any sublist)
 # where the issuer of one is the subject of the other. This is the

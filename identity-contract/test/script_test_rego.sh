@@ -131,56 +131,48 @@ try pdo-sservice create_from_site ${SHORT_OPTS} --file ${F_SERVICE_SITE_FILE} --
              --replicas 1 --duration 60
 
 # -----------------------------------------------------------------
-# setup the context for the rego_policy_agent
+# setup the context for the rego_evaluator
 # -----------------------------------------------------------------
 cd "${SOURCE_ROOT}"
 rm -f ${F_CONTEXT_FILE}
 
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_policy_agent.toml \
-    --bind identity rptest --bind user user1
+try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_evaluator.toml \
+    --bind identity retest --bind user user1
 
 # -----------------------------------------------------------------
-# Test data
+# Test data: an arbitrary Rego policy + two arbitrary inputs
 # -----------------------------------------------------------------
 F_POLICY_FILE=${SCRIPTDIR}/policies/vc_relations.rego
 F_INPUT_CROSS=${SCRIPTDIR}/policies/vc_input_crosslinked.json
 F_INPUT_ISO=${SCRIPTDIR}/policies/vc_input_isolated.json
 
 # =================================================================
-yell create the rego_policy_agent contract
-try id_rego_policy_agent create ${OPTS} --contract identity.rptest.rego_policy_agent
-
-# =================================================================
-yell load the Rego policy
-try id_rego_policy_agent set_policy ${OPTS} --contract identity.rptest.rego_policy_agent \
-    --file ${F_POLICY_FILE}
-
-yell fetch the stored policy
-try id_rego_policy_agent get_policy ${OPTS} --contract identity.rptest.rego_policy_agent
+yell create the rego_evaluator contract
+try id_rego_evaluator create ${OPTS} --contract identity.retest.rego_evaluator
 
 # =================================================================
 yell evaluate crosslinked input, expect true
-F_RESULT_CROSS=$(id_rego_policy_agent evaluate ${OPTS} \
-    --contract identity.rptest.rego_policy_agent \
-    --input ${F_INPUT_CROSS} --rule "data.policy.crosslinked")
+F_RESULT_CROSS=$(id_rego_evaluator evaluate ${OPTS} \
+    --contract identity.retest.rego_evaluator \
+    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.crosslinked")
 say "crosslinked result: ${F_RESULT_CROSS}"
 if [[ "${F_RESULT_CROSS}" != *"True"* && "${F_RESULT_CROSS}" != *"true"* ]] ; then
     die "expected crosslinked=true for ${F_INPUT_CROSS}, got: ${F_RESULT_CROSS}"
 fi
 
 yell evaluate isolated input, expect false
-F_RESULT_ISO=$(id_rego_policy_agent evaluate ${OPTS} \
-    --contract identity.rptest.rego_policy_agent \
-    --input ${F_INPUT_ISO} --rule "data.policy.crosslinked")
+F_RESULT_ISO=$(id_rego_evaluator evaluate ${OPTS} \
+    --contract identity.retest.rego_evaluator \
+    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_ISO} --entrypoint "data.policy.crosslinked")
 say "isolated result: ${F_RESULT_ISO}"
 if [[ "${F_RESULT_ISO}" != *"False"* && "${F_RESULT_ISO}" != *"false"* ]] ; then
     die "expected crosslinked=false for ${F_INPUT_ISO}, got: ${F_RESULT_ISO}"
 fi
 
 yell list crosslinks for crosslinked input
-try id_rego_policy_agent evaluate ${OPTS} \
-    --contract identity.rptest.rego_policy_agent \
-    --input ${F_INPUT_CROSS} --rule "data.policy.links"
+try id_rego_evaluator evaluate ${OPTS} \
+    --contract identity.retest.rego_evaluator \
+    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.links"
 
 # =================================================================
-yell All rego_policy_agent tests passed
+yell All rego_evaluator tests passed

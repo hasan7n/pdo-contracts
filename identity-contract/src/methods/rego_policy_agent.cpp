@@ -33,36 +33,7 @@
 #include "identity/rego_policy_agent.h"
 #include "identity/rego_combinators.h" // hardcoded requirement / result combinator policies
 #include "identity/common/Credential.h"
-
-extern "C"
-{
-#include "regorus/regorus.h"
-}
-
-// Custom allocator hooks called by regorus (custom_allocator feature). The
-// wawaka runtime's malloc returns wasm-default-aligned pointers and aligned
-// new is explicitly unsupported (see common/Util.cpp). Over-allocate and
-// stash the raw base pointer in the slot preceding the aligned address so
-// regorus_free can recover it.
-extern "C" uint8_t *regorus_aligned_alloc(size_t alignment, size_t size)
-{
-    if (alignment < sizeof(void *))
-        alignment = sizeof(void *);
-    const size_t total = size + alignment + sizeof(void *);
-    void *raw = malloc(total);
-    if (raw == nullptr)
-        return nullptr;
-    uintptr_t aligned = ((uintptr_t)raw + sizeof(void *) + alignment - 1) & ~(uintptr_t)(alignment - 1);
-    ((void **)aligned)[-1] = raw;
-    return (uint8_t *)aligned;
-}
-
-extern "C" void regorus_free(uint8_t *ptr)
-{
-    if (ptr == nullptr)
-        return;
-    free(((void **)ptr)[-1]);
-}
+#include "identity/rego_evaluator.h" // reused eval_rego (+ the regorus allocator hooks)
 
 // -----------------------------------------------------------------
 // State
@@ -106,69 +77,9 @@ static KeyValueStore policy_metadata_store("policy_metadata_store");
 //       signature in C++.
 // -----------------------------------------------------------------
 
-// =================================================================
-// Rego helper
-// =================================================================
-
-// -----------------------------------------------------------------
-// Evaluate one Rego policy in its own fresh engine and return the JSON for the
-// requested rule. A fresh engine per policy keeps peak memory to one engine
-// plus one compiled module, which suits the memory-limited runtime. On failure
-// error_msg explains why.
-// -----------------------------------------------------------------
-static bool eval_rego(
-    const char *source,
-    const char *entrypoint,
-    const std::string &input_json,
-    std::string &output_json,
-    std::string &error_msg)
-{
-    RegorusEngine *engine = regorus_engine_new();
-    if (engine == nullptr)
-    {
-        error_msg.assign("unexpected error, failed to create regorus engine");
-        return false;
-    }
-
-    bool ok = true;
-
-    RegorusResult r = regorus_engine_add_policy(engine, "policy.rego", source);
-    if (r.status != Ok)
-    {
-        error_msg.assign(r.error_message ? r.error_message : "add_policy failed");
-        ok = false;
-    }
-    regorus_result_drop(r);
-
-    if (ok)
-    {
-        r = regorus_engine_set_input_json(engine, input_json.c_str());
-        if (r.status != Ok)
-        {
-            error_msg.assign(r.error_message ? r.error_message : "set_input_json failed");
-            ok = false;
-        }
-        regorus_result_drop(r);
-    }
-
-    if (ok)
-    {
-        r = regorus_engine_eval_rule(engine, entrypoint);
-        if (r.status != Ok)
-        {
-            error_msg.assign(r.error_message ? r.error_message : "eval_rule failed");
-            ok = false;
-        }
-        else if (r.output != nullptr)
-        {
-            output_json.assign(r.output);
-        }
-        regorus_result_drop(r);
-    }
-
-    regorus_engine_drop(engine);
-    return ok;
-}
+// eval_rego is reused from the rego_evaluator contract (see
+// identity/rego_evaluator.h); each subpolicy and combinator runs in its own
+// fresh regorus engine.
 
 // =================================================================
 // set_rego_policy helpers
@@ -205,7 +116,7 @@ static bool compute_requirements(
         }
 
         std::string output_json;
-        if (!eval_rego(source, "data.subpolicy.requirements", "{}", output_json, error_msg))
+        if (!ww::identity::rego_evaluator::eval_rego(source, "data.subpolicy.requirements", "{}", output_json, error_msg))
             return false;
 
         // every subpolicy must return a requirements object (an empty {} is fine)
@@ -234,7 +145,7 @@ static bool compute_requirements(
     }
 
     std::string merged_output;
-    if (!eval_rego(REGO_REQUIREMENTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
+    if (!ww::identity::rego_evaluator::eval_rego(REGO_REQUIREMENTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
         return false;
 
     ww::value::Object merged;
@@ -532,7 +443,7 @@ static bool run_subpolicies(
         }
 
         std::string output_json;
-        if (!eval_rego(source, "data.subpolicy.result", input_json, output_json, error_msg))
+        if (!ww::identity::rego_evaluator::eval_rego(source, "data.subpolicy.result", input_json, output_json, error_msg))
             return false;
 
         // a subpolicy must return a result of the expected shape
@@ -575,7 +486,7 @@ static bool combine_results(
     }
 
     std::string merged_output;
-    if (!eval_rego(REGO_RESULTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
+    if (!ww::identity::rego_evaluator::eval_rego(REGO_RESULTS_COMBINATOR, "data.combine.result", combinator_input, merged_output, error_msg))
         return false;
 
     ww::value::Object merged;

@@ -87,6 +87,7 @@ setup(
             'id_credential=pdo.identity.scripts.scripts:credential',
             'id_policy_agent=pdo.identity.scripts.scripts:policy_agent',
             'id_rego_policy_agent=pdo.identity.scripts.scripts:rego_policy_agent',
+            'id_rego_evaluator=pdo.identity.scripts.scripts:rego_evaluator',
             'id_signature_authority=pdo.identity.scripts.scripts:signature_authority',
             'id_wallet=pdo.identity.scripts.scripts:identity',
         ]
