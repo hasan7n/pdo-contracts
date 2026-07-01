@@ -24,9 +24,10 @@
 // capability on a verifiable credential. Where download_token consumes a
 // "DownloadCredential" issued by the basic policy_agent, rego_token consumes a
 // "policy_decision" credential issued by the rego_policy_agent. The merged Rego
-// context the rego_policy_agent carries as that credential's claims is handed to
-// the guardian capability verbatim -- rego_token makes no assumption about its
-// shape, so there is no fixed capability parameter schema.
+// operation the rego_policy_agent carries as that credential's claims --
+// { "name": <operation>, "parameters": { ... } } -- names the guardian operation
+// to invoke and its parameters; rego_token parses it to build the capability. It
+// makes no assumption about the parameters' shape (the policy decides that).
 
 #define REGO_TOKEN_PARAM_SCHEMA                 \
     "{"                                         \
@@ -41,7 +42,7 @@ namespace ww
         {
             // methods
             // bool initialize_contract(const Environment& env);
-            bool do_download(const Message &msg, const Environment &env, Response &rsp);
+            bool do_operation(const Message &msg, const Environment &env, Response &rsp);
         }; // rego_token
     }; // rego
 }; // ww

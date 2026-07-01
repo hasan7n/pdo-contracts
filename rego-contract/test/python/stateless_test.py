@@ -179,7 +179,7 @@ def user_action():
     )
 
     print("Download data...")
-    rego_token.do_download(
+    rego_token.do_operation(
         state,
         read_var("token"),
         asset_user,

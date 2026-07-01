@@ -8,9 +8,10 @@ import rego.v1
 # This is the rego analog of the download policy_agent: it gates a token
 # capability on a presented credential. It requires the "applicant" role to
 # present a "public_key" credential whose claims carry the channel key, then
-# emits that key as the merged context. The rego_policy_agent carries that merged
-# context as the claims of the "policy_decision" credential it issues; the
-# rego_token hands those claims to the guardian capability verbatim.
+# emits a "do_download" operation carrying that key as its parameters. The
+# rego_policy_agent carries that merged operation as the claims of the
+# "policy_decision" credential it issues; the rego_token parses it to build the
+# guardian capability.
 # -----------------------------------------------------------------
 
 # data.subpolicy.requirements -- one "public_key" credential under role "applicant".
@@ -35,9 +36,10 @@ verification_tasks := [{"index": cred.index} |
     some cred in input.presentations.applicant
 ]
 
-# carry the channel key as the merged context so the rego_token can hand it to
-# the guardian capability through the issued policy_decision credential
-context := {"channel_key": key} if {
+# name the "do_download" guardian operation and carry the channel key as its
+# parameters so the rego_token can build the capability from the issued
+# policy_decision credential
+operation := {"name": "do_download", "parameters": {"channel_key": key}} if {
     some cred in input.presentations.applicant
     key := cred.claims.key
 }
@@ -45,5 +47,5 @@ context := {"channel_key": key} if {
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
-    "context": context,
+    "operation": operation,
 }

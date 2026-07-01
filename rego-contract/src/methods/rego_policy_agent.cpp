@@ -70,7 +70,7 @@ static KeyValueStore policy_metadata_store("policy_metadata_store");
 //
 //   data.subpolicy.result -> { "decision": bool,
 //                        "verification_tasks": [ { "index": <number> }, ... ],
-//                        "context": { ... } }
+//                        "operation": { "name": ..., "parameters": {...} } }
 //       Evaluated by issue_policy_credential() with input = { presentations,
 //       trusted_issuers, policy_data }. `index` refers to a credential in
 //       input.presentations; the contract verifies each flagged credential's
@@ -417,7 +417,7 @@ static bool build_rego_input(
 
 // -----------------------------------------------------------------
 // Run every subpolicy over the shared input and collect their result objects.
-// Each result is { decision, verification_tasks, context }. On failure
+// Each result is { decision, verification_tasks, operation }. On failure
 // error_msg explains why.
 // -----------------------------------------------------------------
 static bool run_subpolicies(
@@ -466,14 +466,14 @@ static bool run_subpolicies(
 // Merge the per-subpolicy outputs with the results combinator:
 //   - decision           : true only if every subpolicy allowed
 //   - verification_tasks  : every subpolicy's tasks concatenated
-//   - context             : every subpolicy's context merged into one object
+//   - operation           : every subpolicy's operation merged into one object
 // On failure error_msg explains why.
 // -----------------------------------------------------------------
 static bool combine_results(
     const ww::value::Array &subpolicy_outputs,
     bool &decision,
     ww::value::Array &verification_tasks,
-    ww::value::Object &context,
+    ww::value::Object &operation,
     std::string &error_msg)
 {
     ww::value::Object combinator_input_obj;
@@ -504,10 +504,10 @@ static bool combine_results(
     }
     decision = decision_value.get();
 
-    // tasks and context always exist in the combinator's output, but stay empty
+    // tasks and operation always exist in the combinator's output, but stay empty
     // (the default-constructed values) if for any reason they are absent
     merged.get_value("verification_tasks", verification_tasks);
-    merged.get_value("context", context);
+    merged.get_value("operation", operation);
     return true;
 }
 
@@ -556,13 +556,13 @@ static bool perform_verification_tasks(
 }
 
 // -----------------------------------------------------------------
-// Build and sign the policy-decision credential. The merged context becomes the
+// Build and sign the policy-decision credential. The merged operation becomes the
 // credential's claims. It is signed with the policy agent's issuer key, exactly
 // as policy_agent issues its own credentials.
 // -----------------------------------------------------------------
 static bool build_output_credential(
     const Environment &env,
-    const ww::value::Object &context,
+    const ww::value::Object &operation,
     ww::value::Object &serialized_vc_out)
 {
     ww::identity::Credential credential_out;
@@ -570,12 +570,12 @@ static bool build_output_credential(
     credential_out.issuer_.id_ = env.contract_id_;
     credential_out.credentialSubject_.subject_.id_ = env.originator_id_;
 
-    // the merged context is carried as the credential's claims
-    std::string context_str;
-    ERROR_IF_NOT(context.serialize(context_str),
-                 "unexpected error, failed to serialize the merged context");
-    ERROR_IF_NOT(credential_out.credentialSubject_.claims_.deserialize(context_str.c_str()),
-                 "unexpected error, failed to set the context as claims");
+    // the merged operation is carried as the credential's claims
+    std::string operation_str;
+    ERROR_IF_NOT(operation.serialize(operation_str),
+                 "unexpected error, failed to serialize the merged operation");
+    ERROR_IF_NOT(credential_out.credentialSubject_.claims_.deserialize(operation_str.c_str()),
+                 "unexpected error, failed to set the operation as claims");
 
     // sign the credential with the issuer context primed at initialization
     ww::identity::VerifiableCredential vc_out;
@@ -593,7 +593,7 @@ static bool build_output_credential(
 //   Standardize the caller's presentations, run every subpolicy, merge their results
 //   with the results combinator, and -- if the policy allows -- verify the
 //   credentials the merged result flags and issue a signed credential whose
-//   claims are the merged context.
+//   claims are the merged operation.
 //
 // JSON PARAMETERS:
 //   REGO_POLICY_AGENT_ISSUE_PARAM_SCHEMA
@@ -605,7 +605,7 @@ static bool build_output_credential(
 //
 // RETURNS:
 //   VERIFIABLE_CREDENTIAL_SCHEMA -- a signed credential whose claims are the
-//   merged context, or an error if the policy denied.
+//   merged operation, or an error if the policy denied.
 // -----------------------------------------------------------------
 bool ww::rego::rego_policy_agent::issue_policy_credential(
     const Message &msg, const Environment &env, Response &rsp)
@@ -656,8 +656,8 @@ bool ww::rego::rego_policy_agent::issue_policy_credential(
 
     bool decision = false;
     ww::value::Array verification_tasks;
-    ww::value::Object context;
-    ASSERT_SUCCESS(rsp, combine_results(subpolicy_outputs, decision, verification_tasks, context, error_msg),
+    ww::value::Object operation;
+    ASSERT_SUCCESS(rsp, combine_results(subpolicy_outputs, decision, verification_tasks, operation, error_msg),
                    error_msg.c_str());
 
     // if any subpolicy denied, stop here -- there is no point verifying signatures
@@ -671,7 +671,7 @@ bool ww::rego::rego_policy_agent::issue_policy_credential(
 
     // ---------- issue the signed credential ----------
     ww::value::Object serialized_vc_out;
-    ASSERT_SUCCESS(rsp, build_output_credential(env, context, serialized_vc_out),
+    ASSERT_SUCCESS(rsp, build_output_credential(env, operation, serialized_vc_out),
                    "unexpected error, failed to build the output credential");
 
     return rsp.value(serialized_vc_out, false);

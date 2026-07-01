@@ -57,11 +57,11 @@ result := {
 //   Merge the evaluation results every subpolicy produced.
 //   input : { "subpolicy_outputs": [ { "decision": bool,
 //                                "verification_tasks": [ { "index": n }, ... ],
-//                                "context": { ... } }, ... ] }
+//                                "operation": { "name": ..., "parameters": {...} } }, ... ] }
 //   output (data.combine.result):
 //           { "decision": bool,                    # true only if every subpolicy allowed
 //             "verification_tasks": [ { "index": n }, ... ],  # deduplicated by index
-//             "context": { ... } }                  # all contexts merged
+//             "operation": { ... } }                # all operations merged
 static const char REGO_RESULTS_COMBINATOR[] = R"REGO(
 package combine
 
@@ -84,15 +84,15 @@ task_indices := {task.index |
 # one task per unique index (already deduplicated)
 verification_tasks := [{"index": index} | some index in task_indices]
 
-# merge every subpolicy's context into a single object
-context := object.union_n([ctx |
+# merge every subpolicy's operation into a single object
+operation := object.union_n([op |
     some o in input.subpolicy_outputs
-    ctx := object.get(o, "context", {})
+    op := object.get(o, "operation", {})
 ])
 
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
-    "context": context,
+    "operation": operation,
 }
 )REGO";

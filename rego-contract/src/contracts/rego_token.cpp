@@ -66,7 +66,7 @@ contract_method_reference_t contract_method_dispatch_table[] = {
     CONTRACT_METHOD2(get_contract_code_metadata, ww::contract::attestation::get_contract_code_metadata),
 
     // use the asset
-    CONTRACT_METHOD2(do_download, ww::rego::rego_token::do_download),
+    CONTRACT_METHOD2(do_operation, ww::rego::rego_token::do_operation),
     CONTRACT_METHOD2(register_trusted_issuer, ww::identity::policy_agent::register_trusted_issuer),
     CONTRACT_METHOD2(list_trusted_issuers, ww::identity::policy_agent::list_trusted_issuers),
 

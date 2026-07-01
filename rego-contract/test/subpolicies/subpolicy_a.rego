@@ -32,8 +32,8 @@ verification_tasks := [{"index": cred.index} |
     some cred in input.presentations.applicant
 ]
 
-# contribute the applicant's "property" claim to the merged context
-context := {"applicant_property": prop} if {
+# contribute the applicant's "property" claim to the merged operation parameters
+operation := {"name": "do_operation", "parameters": {"applicant_property": prop}} if {
     some cred in input.presentations.applicant
     prop := cred.claims.property
 }
@@ -41,5 +41,5 @@ context := {"applicant_property": prop} if {
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
-    "context": context,
+    "operation": operation,
 }

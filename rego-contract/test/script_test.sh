@@ -17,7 +17,7 @@
 # -----------------------------------------------------------------
 # End-to-end CLI test for the rego_token + rego_policy_agent flow. It mirrors
 # the download-contract script test: a rego_policy_agent issues a signed
-# "policy_decision" credential (whose claims are the merged Rego context) and a
+# "policy_decision" credential (whose claims are the merged Rego operation) and a
 # rego_token turns that credential into a guardian capability that returns the
 # encrypted data.
 # -----------------------------------------------------------------
@@ -282,7 +282,7 @@ try rego_policy_agent issue_credential ${OPTS} --contract identity.rego_download
     --presentation ${TEST_ROOT}/presentation.json --issued-credential ${TEST_ROOT}/policy_vc.json
 
 yell download data
-try rego_token do_download ${OPTS}  --contract token.test1.token_object.token_1 \
+try rego_token do_operation ${OPTS}  --contract token.test1.token_object.token_1 \
     --vc-file ${TEST_ROOT}/policy_vc.json \
     --output-file ${TEST_ROOT}/encrypted_data.bin
 

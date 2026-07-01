@@ -49,12 +49,24 @@
 // (roles are arbitrary keys, so the schema can only require an object)
 #define REGO_SUBPOLICY_REQUIREMENTS_SCHEMA "{}"
 
-//   data.subpolicy.result -> { decision, verification_tasks, context }
+// The operation a subpolicy authorizes: an operation name and its parameters.
+// The parameters are opaque (their shape is decided by the operation itself), so
+// the schema can only require an object. This is the shape carried through the
+// merged result, the issued credential's claims, and finally parsed by the
+// rego_token to build the guardian capability.
+//   { "name": <operation name>, "parameters": { ... } }
+#define REGO_OPERATION_SCHEMA                   \
+    "{"                                         \
+        SCHEMA_KW(name, "") ","                 \
+        SCHEMA_KWS(parameters, "{}")            \
+    "}"
+
+//   data.subpolicy.result -> { decision, verification_tasks, operation }
 #define REGO_SUBPOLICY_RESULT_SCHEMA                                          \
     "{"                                                                 \
         SCHEMA_KW(decision, true) ","                                   \
         SCHEMA_KWS(verification_tasks, "[{" SCHEMA_KW(index, 0) "}]") ","\
-        SCHEMA_KW(context, {})                                         \
+        SCHEMA_KWS(operation, REGO_OPERATION_SCHEMA)                    \
     "}"
 
 namespace ww
@@ -74,7 +86,7 @@ namespace rego_policy_agent
 
     // run every subpolicy, merge the results, verify the flagged credentials, and --
     // if the policy allows -- issue a signed credential whose claims are the
-    // merged context
+    // merged operation
     bool issue_policy_credential(const Message& msg, const Environment& env, Response& rsp);
 
 }; // rego_policy_agent

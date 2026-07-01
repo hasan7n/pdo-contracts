@@ -7,8 +7,8 @@ import rego.v1
 #
 # It requires the same role as subpolicy A ("applicant" presenting "dummy"), so
 # the requirements combinator merges them to a single role with the union of
-# the required credential types. Its decision and context are merged with the
-# other subpolicies (all decisions must be true; contexts are unioned).
+# the required credential types. Its decision and operation are merged with the
+# other subpolicies (all decisions must be true; operations are unioned).
 # -----------------------------------------------------------------
 
 requirements := {"applicant": ["dummy"]}
@@ -25,10 +25,10 @@ verification_tasks := [{"index": cred.index} |
     some cred in input.presentations.applicant
 ]
 
-context := {"checked_by": "subpolicy_b"}
+operation := {"name": "do_operation", "parameters": {"checked_by": "subpolicy_b"}}
 
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
-    "context": context,
+    "operation": operation,
 }

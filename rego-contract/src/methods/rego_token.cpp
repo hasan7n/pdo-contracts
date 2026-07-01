@@ -32,9 +32,10 @@
 #include "contract/base.h"
 #include "exchange/token_object.h"
 #include "identity/policy_agent.h"
+#include "rego/rego_policy_agent.h" // REGO_OPERATION_SCHEMA
 #include "rego/rego_token.h"
 
-bool ww::rego::rego_token::do_download(
+bool ww::rego::rego_token::do_operation(
     const Message &msg,
     const Environment &env,
     Response &rsp)
@@ -52,11 +53,24 @@ bool ww::rego::rego_token::do_download(
     ww::identity::VerifiableCredential vc_in;
     ASSERT_SUCCESS(rsp, ww::identity::policy_agent::verify_credential(vc_object_in, vc_in, "policy_decision"), "invalid request, ill-formed credential");
 
-    // the credential's claims are the merged Rego context; hand them to the
-    // guardian capability verbatim (the policy decides their shape, not the token)
+    // the credential's claims are the merged operation the policy authorized:
+    // { "name": <operation>, "parameters": { ... } }. The policy -- not the token --
+    // decides which operation to run and with what parameters.
+    ww::value::Object &operation = vc_in.credential_.credentialSubject_.claims_;
+    ASSERT_SUCCESS(rsp, operation.validate_schema(REGO_OPERATION_SCHEMA),
+                   "invalid request, ill-formed operation in credential");
+
+    const char *operation_name = operation.get_string("name");
+    ASSERT_SUCCESS(rsp, operation_name != nullptr, "invalid request, operation missing name");
+
+    ww::value::Object parameters;
+    ASSERT_SUCCESS(rsp, operation.get_value("parameters", parameters),
+                   "invalid request, operation missing parameters");
+
+    // build the guardian capability for the named operation with its parameters
     ww::value::Object result;
     ASSERT_SUCCESS(rsp, ww::exchange::token_object::create_operation_package(
-                            "do_download", vc_in.credential_.credentialSubject_.claims_, result),
+                            operation_name, parameters, result),
                    "unexpected error: failed to generate capability");
 
     // this assumes that generating the capability does not change state, depending on

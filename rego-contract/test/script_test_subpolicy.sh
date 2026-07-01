@@ -19,7 +19,7 @@
 #
 # It creates a credential holder (wallet), a signature authority (trusted
 # issuer), and a rego_policy_agent; provisions two subpolicies; then issues a
-# policy credential whose claims are the merged subpolicy context.
+# policy credential whose claims are the merged subpolicy operation.
 # -----------------------------------------------------------------
 
 # -----------------------------------------------------------------
@@ -213,7 +213,7 @@ try id_wallet get_vp ${OPTS} --contract identity.idtest.wallet \
 # wrap the presentation under the required role: { "applicant": <VP> }
 echo "{\"applicant\": $(cat ${TEST_ROOT}/vp1.json)}" > ${TEST_ROOT}/presentation.json
 
-yell issue the policy credential (claims = merged subpolicy context)
+yell issue the policy credential (claims = merged subpolicy operation)
 try rego_policy_agent issue_credential ${OPTS} --contract identity.rptest.rego_policy_agent \
     --presentation ${TEST_ROOT}/presentation.json \
     --issued-credential ${TEST_ROOT}/rp_credential.json
@@ -221,7 +221,7 @@ try rego_policy_agent issue_credential ${OPTS} --contract identity.rptest.rego_p
 say issued policy credential is:
 say $(<${TEST_ROOT}/rp_credential.json)
 
-yell extract the issued credential (claims should carry the merged context)
+yell extract the issued credential (claims should carry the merged operation)
 try id_credential extract --signed-credential ${TEST_ROOT}/rp_credential.json
 
 # =================================================================

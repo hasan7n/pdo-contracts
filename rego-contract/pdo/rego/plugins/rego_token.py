@@ -41,10 +41,10 @@ __all__ = [
     "op_escrow",
     "op_release",
     "op_claim",
-    "op_do_download",
+    "op_do_operation",
     "cmd_mint_tokens",
     "cmd_transfer_assets",
-    "cmd_do_download",
+    "cmd_do_operation",
     "do_rego_token",
     "do_rego_token_contract",
     "load_commands",
@@ -77,13 +77,14 @@ logger = logging.getLogger(__name__)
 
 ## -----------------------------------------------------------------
 ## -----------------------------------------------------------------
-class op_do_download(pcontract.contract_op_base):
-    """op_download implements the full end-to-end download of data gated on a
-    policy decision credential issued by the rego_policy_agent.
+class op_do_operation(pcontract.contract_op_base):
+    """op_do_operation performs the guardian operation the rego_policy_agent
+    authorized, gated on the policy decision credential it issued. The operation
+    (its name and parameters) is carried in the credential's claims.
     """
 
-    name = "op_download"
-    help = "download using a rego policy decision credential"
+    name = "op_operation"
+    help = "perform an operation using a rego policy decision credential"
 
     @classmethod
     def add_arguments(cls, subparser):
@@ -106,7 +107,7 @@ class op_do_download(pcontract.contract_op_base):
         params = {}
         params["policy_vc"] = vc
 
-        message = invocation_request("do_download", **params)
+        message = invocation_request("do_operation", **params)
         capability = pcontract_cmd.send_to_contract(state, message, **session_params)
 
         capability = json.loads(capability)
@@ -123,13 +124,14 @@ class op_do_download(pcontract.contract_op_base):
 
 ## -----------------------------------------------------------------
 ## -----------------------------------------------------------------
-class cmd_do_download(pcommand.contract_command_base):
-    """cmd_download implements the full end-to-end download of data gated on a
-    policy decision credential issued by the rego_policy_agent.
+class cmd_do_operation(pcommand.contract_command_base):
+    """cmd_do_operation performs the full end-to-end guardian operation the
+    rego_policy_agent authorized, gated on the policy decision credential it
+    issued. The operation and its parameters are carried in the credential's claims.
     """
 
-    name = "do_download"
-    help = "download using a rego policy decision credential"
+    name = "do_operation"
+    help = "perform an operation using a rego policy decision credential"
 
     @classmethod
     def add_arguments(cls, subparser):
@@ -164,7 +166,7 @@ class cmd_do_download(pcommand.contract_command_base):
 
         session = pbuilder.SessionParameters(save_file=save_file)
         result = pcontract.invoke_contract_op(
-            op_do_download,
+            op_do_operation,
             state,
             context,
             session,
@@ -193,7 +195,7 @@ __operations__ = [
     op_escrow,
     op_release,
     op_claim,
-    op_do_download,
+    op_do_operation,
     op_register_trusted_issuer,
     op_list_trusted_issuers,
 ]
@@ -205,7 +207,7 @@ do_rego_token_contract = pcontract.create_shell_command(
 __commands__ = [
     cmd_mint_tokens,
     cmd_transfer_assets,
-    cmd_do_download,
+    cmd_do_operation,
     cmd_register_trusted_issuer,
     cmd_list_trusted_issuers,
 ]
