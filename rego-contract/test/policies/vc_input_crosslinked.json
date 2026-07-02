@@ -1,9 +1,0 @@
-[
-  [
-    {"issuer": "did:example:A", "credentialSubject": {"id": "did:example:B"}},
-    {"issuer": "did:example:C", "credentialSubject": {"id": "did:example:D"}}
-  ],
-  [
-    {"issuer": "did:example:B", "credentialSubject": {"id": "did:example:E"}}
-  ]
-]

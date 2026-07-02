@@ -15,11 +15,16 @@
 # limitations under the License.
 
 # -----------------------------------------------------------------
-# End-to-end CLI test for the rego_token + rego_policy_agent flow. It mirrors
-# the download-contract script test: a rego_policy_agent issues a signed
-# "policy_decision" credential (whose claims are the merged Rego operation) and a
-# rego_token turns that credential into a guardian capability that returns the
-# encrypted data.
+# End-to-end CLI test for the rego_policy_agent + rego_token flow.
+#
+# It exercises a two-subpolicy policy end to end:
+#   - subpolicy_a is an attribute gate: it requires a "membership" credential
+#     whose institution is on the data owner's allow list (policy data).
+#   - subpolicy_b supplies the download: it requires a "public_key" credential
+#     carrying the requester's channel key.
+# The rego_policy_agent merges their results and issues a signed "policy_decision"
+# credential whose claims are the merged operation; the rego_token turns that
+# credential into a guardian capability that returns the encrypted data.
 # -----------------------------------------------------------------
 : "${PDO_LEDGER_URL?Missing environment variable PDO_LEDGER_URL}"
 : "${PDO_HOME?Missing environment variable PDO_HOME}"
@@ -195,6 +200,9 @@ rm -f ${F_CONTEXT_FILE}
 try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
     --bind identity public_key_authority --bind user user1
 
+try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/signature_authority.toml \
+    --bind identity membership_authority --bind user user2
+
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_policy_agent.toml \
     --bind identity rego_download --bind user user4
 
@@ -206,9 +214,14 @@ try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/identity.toml
 
 
 # -----------------------------------------------------------------
-# Test data: the token subpolicy (requires role "applicant" -> "public_key")
+# Test data: the two subpolicies and the data owner's allow list
+#   subpolicy_a -- role "applicant" -> "membership" (checked against policy data)
+#   subpolicy_b -- role "applicant" -> "public_key" (carries the channel key)
 # -----------------------------------------------------------------
-F_TOKEN_SUBPOLICY=${SCRIPTDIR}/subpolicies/token_subpolicy.rego
+F_SUBPOLICY_A=${SCRIPTDIR}/subpolicies/subpolicy_a.rego
+F_SUBPOLICY_B=${SCRIPTDIR}/subpolicies/subpolicy_b.rego
+F_POLICY_DATA=${SCRIPTDIR}/policy_data.json
+F_MEMBERSHIP_CREDENTIAL=${SCRIPTDIR}/credential1.json
 
 # -----------------------------------------------------------------
 # start the tests
@@ -216,30 +229,55 @@ F_TOKEN_SUBPOLICY=${SCRIPTDIR}/subpolicies/token_subpolicy.rego
 
 # =================================================================
 
-########### setup: public_key_authority
-yell create a public_key_authority and register signing context
+########### setup: public_key authority
+yell create a public_key authority and register signing context
 try id_signature_authority create ${OPTS} --contract identity.public_key_authority.signature_authority \
     -d 'Public Key Authority: issues public key credentials'
 
 try id_signature_authority register ${OPTS} --contract identity.public_key_authority.signature_authority \
-    -d 'fixed key satest' --fixed --path public_key
+    -d 'fixed key public_key' --fixed --path public_key
+
+
+########### setup: membership authority
+yell create a membership authority and register signing context
+try id_signature_authority create ${OPTS} --contract identity.membership_authority.signature_authority \
+    -d 'Membership Authority: issues institution membership credentials'
+
+try id_signature_authority register ${OPTS} --contract identity.membership_authority.signature_authority \
+    -d 'fixed key membership' --fixed --path membership
 
 
 ########### setup: rego policy agent
 try rego_policy_agent create ${OPTS} --contract identity.rego_download.rego_policy_agent \
-    -d 'rego download policy agent: accepts a public key VC and emits a channel key.'
+    -d 'rego download policy agent: gates a channel key on an allowed membership.'
 
-yell register the public_key_authority as a trusted issuer for type "public_key"
+yell register the public_key authority as a trusted issuer for type public_key
 try rego_policy_agent register ${OPTS} --contract identity.rego_download.rego_policy_agent \
     --issuer identity.public_key_authority.signature_authority --path public_key --credential-types public_key
 
-yell set the rego policy (token subpolicy)
-try rego_policy_agent set_rego_policy ${OPTS} --contract identity.rego_download.rego_policy_agent \
-    --module token_subpolicy ${F_TOKEN_SUBPOLICY}
+yell register the membership authority as a trusted issuer for type membership
+try rego_policy_agent register ${OPTS} --contract identity.rego_download.rego_policy_agent \
+    --issuer identity.membership_authority.signature_authority --path membership --credential-types membership
 
-yell set the (opaque) policy data
+yell set the rego policy with subpolicy_a and subpolicy_b
+try rego_policy_agent set_rego_policy ${OPTS} --contract identity.rego_download.rego_policy_agent \
+    --module subpolicy_a ${F_SUBPOLICY_A} \
+    --module subpolicy_b ${F_SUBPOLICY_B}
+
+yell set the policy data with the allowed institutions
 try rego_policy_agent set_policy ${OPTS} --contract identity.rego_download.rego_policy_agent \
-    --data ${SCRIPTDIR}/policy_data.json
+    --data ${F_POLICY_DATA}
+
+yell fetch the stored rego policy
+try rego_policy_agent get_rego_policy ${OPTS} --contract identity.rego_download.rego_policy_agent
+
+yell fetch the merged requirements, expect role applicant with membership and public_key
+F_REQUIREMENTS=$(rego_policy_agent get_requirements ${OPTS} \
+    --contract identity.rego_download.rego_policy_agent)
+say "merged requirements: ${F_REQUIREMENTS}"
+if [[ "${F_REQUIREMENTS}" != *"applicant"* || "${F_REQUIREMENTS}" != *"membership"* || "${F_REQUIREMENTS}" != *"public_key"* ]] ; then
+    die "expected merged requirements to contain role applicant with membership and public_key, got: ${F_REQUIREMENTS}"
+fi
 
 
 ########### setup: rego download token
@@ -266,13 +304,19 @@ yell sign public key credential
 try id_signature_authority sign_credential ${OPTS} --contract identity.public_key_authority.signature_authority \
     --path public_key --credential ${TEST_ROOT}/user_channel_key/credential_key.json --signed-credential ${TEST_ROOT}/public_key_vc.json
 
-yell add credential to wallet
+yell sign membership credential
+try id_signature_authority sign_credential ${OPTS} --contract identity.membership_authority.signature_authority \
+    --path membership --credential ${F_MEMBERSHIP_CREDENTIAL} --signed-credential ${TEST_ROOT}/membership_vc.json
+
+yell add credentials to wallet
 try id_wallet add_vc ${OPTS} --contract identity.downloader.wallet \
     --credential ${TEST_ROOT}/public_key_vc.json
+try id_wallet add_vc ${OPTS} --contract identity.downloader.wallet \
+    --credential ${TEST_ROOT}/membership_vc.json
 
-yell generating a VP
+yell generating a VP over both required credential types
 try id_wallet get_vp ${OPTS} --contract identity.downloader.wallet \
-    --types public_key --file ${TEST_ROOT}/vp.json
+    --types membership public_key --file ${TEST_ROOT}/vp.json
 
 # wrap the presentation under the required role: { "applicant": <VP> }
 echo "{\"applicant\": $(cat ${TEST_ROOT}/vp.json)}" > ${TEST_ROOT}/presentation.json

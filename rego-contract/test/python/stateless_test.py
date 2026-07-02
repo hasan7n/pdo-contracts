@@ -18,8 +18,15 @@ asset_user = "user3"
 guardian_url = GUARDIAN_URL
 script_dir = os.path.dirname(os.path.abspath(__file__))
 policy_data = os.path.join(script_dir, os.path.pardir, "policy_data.json")
-token_subpolicy_path = os.path.join(
-    script_dir, os.path.pardir, "subpolicies", "token_subpolicy.rego"
+subpolicy_a_path = os.path.join(
+    script_dir, os.path.pardir, "subpolicies", "subpolicy_a.rego"
+)
+subpolicy_b_path = os.path.join(
+    script_dir, os.path.pardir, "subpolicies", "subpolicy_b.rego"
+)
+# the "membership" credential subpolicy_a checks against the policy data
+membership_credential_path = os.path.join(
+    script_dir, os.path.pardir, "credential1.json"
 )
 
 public_pem_file, private_pem_file = generate_keys(
@@ -28,6 +35,9 @@ public_pem_file, private_pem_file = generate_keys(
 public_key_credential_path = generate_credential(public_pem_file, SCRATCH_DIR)
 signed_public_key_credential_path = os.path.join(
     SCRATCH_DIR, "credential_key_signed.json"
+)
+signed_membership_credential_path = os.path.join(
+    SCRATCH_DIR, "membership_credential_signed.json"
 )
 
 vp_output_file = os.path.join(SCRATCH_DIR, "vp.json")
@@ -59,6 +69,23 @@ def issuer_setup():
         extensible=False,
     )
 
+    # setup membership authority (issues the institution membership credential)
+    print("Setting up membership signature authority...")
+    membership_authority = signature_authority.create_signature_authority(
+        state, issuer_user, description="membership authority"
+    )
+    write_var(membership_authority, "membership_authority")
+    time.sleep(1)
+    print("registering membership signing context...")
+    signature_authority.register_signing_context(
+        state,
+        read_var("membership_authority"),
+        issuer_user,
+        path=["membership"],
+        description="test",
+        extensible=False,
+    )
+
 
 def owner_setup():
     # policy setup
@@ -83,7 +110,7 @@ def owner_setup():
         path=["__ISSUER__"],
     )
 
-    print("Registering policy agent trusted issuer (public_key)...")
+    print("Registering policy agent trusted issuer for public_key...")
     policy_agent.register_trusted_issuer(
         state,
         read_var("rego_policy"),
@@ -92,14 +119,27 @@ def owner_setup():
         path=["key"],
         credential_types=["public_key"],
     )
+
+    print("Registering policy agent trusted issuer for membership...")
+    policy_agent.register_trusted_issuer(
+        state,
+        read_var("rego_policy"),
+        read_var("membership_authority"),
+        asset_owner,
+        path=["membership"],
+        credential_types=["membership"],
+    )
     time.sleep(1)
 
-    print("setting rego policy (token subpolicy)...")
+    print("setting rego policy with subpolicy_a and subpolicy_b...")
     policy_agent.set_rego_policy(
         state,
         read_var("rego_policy"),
         asset_owner,
-        module=[["token_subpolicy", token_subpolicy_path]],
+        module=[
+            ["subpolicy_a", subpolicy_a_path],
+            ["subpolicy_b", subpolicy_b_path],
+        ],
     )
 
     print("setting policy data...")
@@ -127,14 +167,30 @@ def issuer_action():
         signed_credential=signed_public_key_credential_path,
     )
 
+    print("Issuing membership credential...")
+    signature_authority.sign_credential(
+        state,
+        read_var("membership_authority"),
+        issuer_user,
+        path=["membership"],
+        credential=membership_credential_path,
+        signed_credential=signed_membership_credential_path,
+    )
+
 
 def user_action():
-    print("Adding credential to user wallet...")
+    print("Adding credentials to user wallet...")
     identity.add_vc(
         state,
         read_var("user_wallet"),
         asset_user,
         credential_file=signed_public_key_credential_path,
+    )
+    identity.add_vc(
+        state,
+        read_var("user_wallet"),
+        asset_user,
+        credential_file=signed_membership_credential_path,
     )
 
     print("Getting token policy agent...")

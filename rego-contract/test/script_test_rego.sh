@@ -140,39 +140,70 @@ try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/rego_evaluator
     --bind identity retest --bind user user1
 
 # -----------------------------------------------------------------
-# Test data: an arbitrary Rego policy + two arbitrary inputs
+# Test data: three small toy Rego policies and their inputs
 # -----------------------------------------------------------------
-F_POLICY_FILE=${SCRIPTDIR}/policies/vc_relations.rego
-F_INPUT_CROSS=${SCRIPTDIR}/policies/vc_input_crosslinked.json
-F_INPUT_ISO=${SCRIPTDIR}/policies/vc_input_isolated.json
+F_NUMBERS_POLICY=${SCRIPTDIR}/policies/numbers.rego
+F_NUMBERS_INPUT=${SCRIPTDIR}/policies/numbers_input.json
+F_ACCESS_POLICY=${SCRIPTDIR}/policies/access.rego
+F_ACCESS_ALLOW_INPUT=${SCRIPTDIR}/policies/access_allow_input.json
+F_ACCESS_DENY_INPUT=${SCRIPTDIR}/policies/access_deny_input.json
+F_GREETING_POLICY=${SCRIPTDIR}/policies/greeting.rego
+F_GREETING_INPUT=${SCRIPTDIR}/policies/greeting_input.json
 
 # =================================================================
 yell create the rego_evaluator contract
 try rego_evaluator create ${OPTS} --contract identity.retest.rego_evaluator
 
 # =================================================================
-yell evaluate crosslinked input, expect true
-F_RESULT_CROSS=$(rego_evaluator evaluate ${OPTS} \
+# numbers policy: arithmetic over a list of values
+yell evaluate numbers.total, expect 110
+F_TOTAL=$(rego_evaluator evaluate ${OPTS} \
     --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.crosslinked")
-say "crosslinked result: ${F_RESULT_CROSS}"
-if [[ "${F_RESULT_CROSS}" != *"True"* && "${F_RESULT_CROSS}" != *"true"* ]] ; then
-    die "expected crosslinked=true for ${F_INPUT_CROSS}, got: ${F_RESULT_CROSS}"
+    --rego-source ${F_NUMBERS_POLICY} --input ${F_NUMBERS_INPUT} --entrypoint "data.numbers.total")
+say "numbers.total: ${F_TOTAL}"
+if [[ "${F_TOTAL}" != *"110"* ]] ; then
+    die "expected numbers.total=110, got: ${F_TOTAL}"
 fi
 
-yell evaluate isolated input, expect false
-F_RESULT_ISO=$(rego_evaluator evaluate ${OPTS} \
+yell evaluate numbers.large, expect true
+F_LARGE=$(rego_evaluator evaluate ${OPTS} \
     --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_ISO} --entrypoint "data.policy.crosslinked")
-say "isolated result: ${F_RESULT_ISO}"
-if [[ "${F_RESULT_ISO}" != *"False"* && "${F_RESULT_ISO}" != *"false"* ]] ; then
-    die "expected crosslinked=false for ${F_INPUT_ISO}, got: ${F_RESULT_ISO}"
+    --rego-source ${F_NUMBERS_POLICY} --input ${F_NUMBERS_INPUT} --entrypoint "data.numbers.large")
+say "numbers.large: ${F_LARGE}"
+if [[ "${F_LARGE}" != *"true"* && "${F_LARGE}" != *"True"* ]] ; then
+    die "expected numbers.large=true, got: ${F_LARGE}"
 fi
 
-yell list crosslinks for crosslinked input
-try rego_evaluator evaluate ${OPTS} \
+# =================================================================
+# access policy: role based allow rule
+yell evaluate access.allow for an admin, expect true
+F_ADMIN=$(rego_evaluator evaluate ${OPTS} \
     --contract identity.retest.rego_evaluator \
-    --rego-source ${F_POLICY_FILE} --input ${F_INPUT_CROSS} --entrypoint "data.policy.links"
+    --rego-source ${F_ACCESS_POLICY} --input ${F_ACCESS_ALLOW_INPUT} --entrypoint "data.access.allow")
+say "access.allow admin: ${F_ADMIN}"
+if [[ "${F_ADMIN}" != *"true"* && "${F_ADMIN}" != *"True"* ]] ; then
+    die "expected access.allow=true for an admin, got: ${F_ADMIN}"
+fi
+
+yell evaluate access.allow for a guest, expect false
+F_GUEST=$(rego_evaluator evaluate ${OPTS} \
+    --contract identity.retest.rego_evaluator \
+    --rego-source ${F_ACCESS_POLICY} --input ${F_ACCESS_DENY_INPUT} --entrypoint "data.access.allow")
+say "access.allow guest: ${F_GUEST}"
+if [[ "${F_GUEST}" != *"false"* && "${F_GUEST}" != *"False"* ]] ; then
+    die "expected access.allow=false for a guest, got: ${F_GUEST}"
+fi
+
+# =================================================================
+# greeting policy: string formatting
+yell evaluate greeting.message, expect a greeting for rego
+F_GREETING=$(rego_evaluator evaluate ${OPTS} \
+    --contract identity.retest.rego_evaluator \
+    --rego-source ${F_GREETING_POLICY} --input ${F_GREETING_INPUT} --entrypoint "data.greeting.message")
+say "greeting.message: ${F_GREETING}"
+if [[ "${F_GREETING}" != *"hello, rego"* ]] ; then
+    die "expected greeting.message to contain 'hello, rego', got: ${F_GREETING}"
+fi
 
 # =================================================================
 yell All rego_evaluator tests passed
