@@ -10,6 +10,10 @@ as a static library (`libregorus_ffi.a`) for the `wasm32-wasip1` target
 using `wasi-sdk-27`. The result is linked into PDO contracts to evaluate
 Rego policies inside a wawaka contract.
 
+`build.sh` fetches the regorus source itself: it clones a pinned commit
+(`REGORUS_REPO` / `REGORUS_COMMIT` at the top of the script) into a temporary
+directory under `/tmp`. To move to a newer regorus, bump those two values.
+
 ## Build configuration
 
 The crate built is `regorus-ffi` (under `bindings/ffi/`) with:
@@ -27,14 +31,12 @@ contract must define:
   - `regorus_aligned_alloc(size_t alignment, size_t size) -> uint8_t*`
   - `regorus_free(uint8_t* ptr)`
 
-These shims are provided by `src/methods/rego_policy_agent.cpp`.
+These shims are provided by `src/methods/rego_evaluator.cpp`.
 
 ## Inputs
 
-  - `-s <path>`: path to the regorus source tree (must contain
-    `bindings/ffi/Cargo.toml`). Required.
   - `-o <path>`: where to install `lib/libregorus_ffi.a` and
     `include/regorus/regorus.h`. Defaults to `${PWD}/precompiled`.
 
-CMake passes both arguments. `cargo` must be on `PATH` and the
-`wasm32-wasip1` target installed (`rustup target add wasm32-wasip1`).
+CMake passes `-o`. `git` and `cargo` must be on `PATH` and the `wasm32-wasip1`
+target installed (`rustup target add wasm32-wasip1`).

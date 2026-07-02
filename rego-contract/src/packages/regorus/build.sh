@@ -15,26 +15,26 @@
 
 source ${PDO_HOME}/bin/lib/common.sh
 
-OUTPUT_DIR=${PWD}/precompiled
-REGORUS_SRC=
+# The exact regorus revision this build targets. Pinned to a commit (not a
+# branch or tag ref) so the produced artifact is reproducible.
+REGORUS_REPO=https://github.com/microsoft/regorus.git
+REGORUS_COMMIT=acf7f7a25ec718be7c0d58eb2bd8dd1e6c0163df  # regorus-v0.10.1
 
-while getopts "o:s:" opt; do
+OUTPUT_DIR=${PWD}/precompiled
+
+while getopts "o:" opt; do
     case $opt in
         o)
             OUTPUT_DIR=$OPTARG ;;
-        s)
-            REGORUS_SRC=$OPTARG ;;
         \?)
             die "Invalid option: -$OPTARG" >&2 ;;
     esac
 done
 
-if [ -z "${REGORUS_SRC}" ]; then
-    die "regorus source directory not specified (-s)"
-fi
-if [ ! -d "${REGORUS_SRC}/bindings/ffi" ]; then
-    die "regorus source not found at ${REGORUS_SRC} (expected bindings/ffi/)"
-fi
+# Clone the pinned regorus revision into a temporary directory.
+REGORUS_SRC=$(mktemp -d /tmp/regorus-src.XXXXXXXX)
+try git clone "${REGORUS_REPO}" "${REGORUS_SRC}"
+try git -C "${REGORUS_SRC}" checkout -q "${REGORUS_COMMIT}"
 
 WASI_SDK_DIR=/opt/wasi-sdk
 if [ ! -d "${WASI_SDK_DIR}" ]; then

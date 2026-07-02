@@ -9,7 +9,7 @@ INCLUDE(methods.cmake)
 ADD_CUSTOM_COMMAND(
   OUTPUT ${REGORUS_WASM_LIB} ${REGORUS_WASM_INCLUDE_DIR}/regorus/regorus.h
   COMMAND ${REGORUS_SOURCE_DIR}/build.sh
-  ARGS -o ${REGORUS_BUILD_DIR}/precompiled -s ${REGORUS_SRC_DIR}
+  ARGS -o ${REGORUS_BUILD_DIR}/precompiled
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS ${REGORUS_SOURCE_DIR}/build.sh
   COMMENT "Building regorus for WebAssembly"
