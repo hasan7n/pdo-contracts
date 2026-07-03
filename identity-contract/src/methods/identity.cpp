@@ -519,7 +519,8 @@ bool ww::identity::identity::get_extended_verifying_key(const Message& msg, cons
 // -----------------------------------------------------------------
 bool ww::identity::identity::add_vc(const Message& msg, const Environment& env, Response& rsp)
 {
-    ASSERT_SENDER_IS_OWNER(env, rsp);
+    // TODO: for now, allow any person to add a VC to any wallet, for an easier UX.
+    // ASSERT_SENDER_IS_OWNER(env, rsp);
     ASSERT_INITIALIZED(rsp);
 
     ASSERT_SUCCESS(rsp, msg.validate_schema(IDENTITY_ADD_VC_PARAM_SCHEMA),
