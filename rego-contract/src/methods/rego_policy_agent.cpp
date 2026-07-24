@@ -28,11 +28,16 @@
 #include "Value.h"
 #include "WasmExtensions.h"
 
+#include "Cryptography.h"
+
 #include "contract/base.h"
 #include "identity/policy_agent.h" // inherited trusted-issuer / policy-data / verify / issue methods
 #include "rego/rego_policy_agent.h"
 #include "rego/rego_combinators.h" // hardcoded requirement / result combinator policies
 #include "identity/common/Credential.h"
+#include "identity/crypto/Crypto.h"       // SHA384Hash, used for direct-key EC verification
+#include "identity/crypto/PublicKey.h"    // EC public key, for direct-key EC verification
+#include "identity/crypto/RSAPublicKey.h" // RSA public key, for direct-key RSA verification
 #include "rego/rego_evaluator.h" // reused eval_rego (+ the regorus allocator hooks)
 
 // -----------------------------------------------------------------
@@ -321,9 +326,14 @@ bool ww::rego::rego_policy_agent::get_rego_policy(
 
 // -----------------------------------------------------------------
 // Standardize the caller's presentations into the shared subpolicy input:
-//   input.presentations = { role: [ { type, issuer, subject, claims, index }, ... ], ... }
+//   input.presentations = { role: [ { type, issuer, subject, claims, index, proof_value }, ... ], ... }
 //   input.trusted_issuers = { issuer_id: [ { verifying_context, credential_types }, ... ] }
 //   input.policy_data   = <opaque policy data>
+//
+// proof_value is the credential's signature (the proof's base64 proofValue). It
+// lets a subpolicy match a credential presented on its own against the same
+// credential embedded (as a claim) inside another credential, since the embedded
+// copy keeps its proof but hides its claims behind a base64 blob.
 //
 // Roles are taken from the stored `roles` list (so we never enumerate the
 // presentations object). For each role we deserialize its verifiable
@@ -383,6 +393,7 @@ static bool build_rego_input(
             cred.set_string("subject", vc.credential_.credentialSubject_.subject_.id_.c_str());
             cred.set_value("claims", vc.credential_.credentialSubject_.claims_);
             cred.set_number("index", (double)index);
+            cred.set_string("proof_value", vc.proof_.proofValue_.c_str());
 
             ERROR_IF_NOT(role_creds.append_value(cred),
                          "unexpected error, failed to build credential view");
@@ -464,15 +475,17 @@ static bool run_subpolicies(
 
 // -----------------------------------------------------------------
 // Merge the per-subpolicy outputs with the results combinator:
-//   - decision           : true only if every subpolicy allowed
-//   - verification_tasks  : every subpolicy's tasks concatenated
-//   - operation           : every subpolicy's operation merged into one object
+//   - decision                        : true only if every subpolicy allowed
+//   - verification_tasks              : every subpolicy's trusted-issuer tasks
+//   - vc_supplied_verification_tasks  : every subpolicy's supplied-key tasks
+//   - operation                        : every subpolicy's operation merged into one
 // On failure error_msg explains why.
 // -----------------------------------------------------------------
 static bool combine_results(
     const ww::value::Array &subpolicy_outputs,
     bool &decision,
     ww::value::Array &verification_tasks,
+    ww::value::Array &vc_supplied_verification_tasks,
     ww::value::Object &operation,
     std::string &error_msg)
 {
@@ -504,21 +517,83 @@ static bool combine_results(
     }
     decision = decision_value.get();
 
-    // tasks and operation always exist in the combinator's output, but stay empty
-    // (the default-constructed values) if for any reason they are absent
+    // both task lists and the operation always exist in the combinator's output,
+    // but stay empty (the default-constructed values) if for any reason they are absent
     merged.get_value("verification_tasks", verification_tasks);
+    merged.get_value("vc_supplied_verification_tasks", vc_supplied_verification_tasks);
     merged.get_value("operation", operation);
     return true;
 }
 
 // -----------------------------------------------------------------
-// Cryptographically check each credential the merged result flagged. The merged
-// tasks are already deduplicated by the results combinator. The credential type
-// comes from the credential itself (trusted), not from the task. Returns true
-// only if every flagged credential verifies, returning false at the first one
-// that does not.
+// Verify the credential's signature directly against a public key the subpolicy
+// supplied, instead of against a trusted issuer. key_type selects the algorithm:
+//   "ec"  -- ECDSA over secp384r1 / SHA-384, the scheme PDO credentials use
+//   "rsa" -- RSASSA-PKCS1-v1_5 / SHA-256
+// The message is the base64 serialized credential the signature was computed
+// over (see VerifiableCredential::build / check).
 // -----------------------------------------------------------------
-static bool perform_verification_tasks(
+static bool verify_with_supplied_key(
+    const ww::identity::VerifiableCredential &vc,
+    const std::string &key,
+    const std::string &key_type)
+{
+    const std::string serialized_credential(vc.get_serialized_credential());
+    ww::types::ByteArray message(serialized_credential.begin(), serialized_credential.end());
+
+    ww::types::ByteArray signature;
+    if (!ww::crypto::b64_decode(vc.proof_.proofValue_, signature))
+        return false;
+
+    if (key_type == "rsa")
+    {
+        pdo_contracts::crypto::signing::RSAPublicKey public_key;
+        if (!public_key.Deserialize(key))
+            return false;
+        return public_key.VerifySignature(message, signature);
+    }
+
+    if (key_type == "ec")
+    {
+        pdo_contracts::crypto::signing::PublicKey public_key;
+        if (!public_key.Deserialize(key))
+            return false;
+        return public_key.VerifySignature(message, signature, pdo_contracts::crypto::SHA384Hash);
+    }
+
+    return false; // unknown key type -- cannot verify, so deny
+}
+
+// -----------------------------------------------------------------
+// Look up and deserialize the credential a task points at (by its global index).
+// Returns false if the index is out of range or the credential is ill-formed.
+// -----------------------------------------------------------------
+static bool load_task_credential(
+    const ww::value::Object &task,
+    const std::vector<std::string> &vc_json_by_index,
+    ww::value::Object &vc_object,
+    ww::identity::VerifiableCredential &vc)
+{
+    const int index = (int)task.get_number("index");
+    if (index < 0 || (size_t)index >= vc_json_by_index.size())
+        return false;
+
+    if (!vc_object.deserialize(vc_json_by_index[index].c_str()))
+        return false;
+
+    if (!vc.deserialize(vc_object) || vc.credential_.type_.empty())
+        return false;
+
+    return true;
+}
+
+// -----------------------------------------------------------------
+// Verify every trusted-issuer task: each credential is checked against the
+// trusted issuer registered for its type (the type comes from the credential
+// itself, which is trusted). Returns true only if every task's credential
+// verifies, returning false at the first one that does not.
+// -----------------------------------------------------------------
+static bool perform_trusted_issuer_tasks(
     const ww::value::Array &verification_tasks,
     const std::vector<std::string> &vc_json_by_index)
 {
@@ -529,26 +604,46 @@ static bool perform_verification_tasks(
         if (!verification_tasks.get_value(i, task))
             return false; // malformed task -- cannot verify, so deny
 
-        const int index = (int)task.get_number("index");
+        ww::value::Object vc_object;
+        ww::identity::VerifiableCredential vc;
+        if (!load_task_credential(task, vc_json_by_index, vc_object, vc))
+            return false;
 
-        bool verified = false;
-        if (index >= 0 && (size_t)index < vc_json_by_index.size())
-        {
-            ww::value::Object vc_object;
-            if (vc_object.deserialize(vc_json_by_index[index].c_str()))
-            {
-                ww::identity::VerifiableCredential vc;
-                if (vc.deserialize(vc_object) && !vc.credential_.type_.empty())
-                {
-                    // inherited from policy_agent -- checks the signature against
-                    // the registered trusted issuer for this credential type
-                    verified = ww::identity::policy_agent::verify_credential(
-                        vc_object, vc, vc.credential_.type_[0]);
-                }
-            }
-        }
+        if (!ww::identity::policy_agent::verify_credential(vc_object, vc, vc.credential_.type_[0]))
+            return false; // fail-safe: stop at the first failed verification
+    }
 
-        if (!verified)
+    return true;
+}
+
+// -----------------------------------------------------------------
+// Verify every supplied-key task: each credential is checked against the PEM
+// public key carried in the task (see verify_with_supplied_key), using the task's
+// key_type. Returns true only if every task's credential verifies, returning
+// false at the first one that does not.
+// -----------------------------------------------------------------
+static bool perform_supplied_key_tasks(
+    const ww::value::Array &verification_tasks,
+    const std::vector<std::string> &vc_json_by_index)
+{
+    const size_t count = verification_tasks.get_count();
+    for (size_t i = 0; i < count; i++)
+    {
+        ww::value::Object task;
+        if (!verification_tasks.get_value(i, task))
+            return false; // malformed task -- cannot verify, so deny
+
+        ww::value::Object vc_object;
+        ww::identity::VerifiableCredential vc;
+        if (!load_task_credential(task, vc_json_by_index, vc_object, vc))
+            return false;
+
+        const char *key = task.get_string("key");
+        const char *key_type = task.get_string("key_type");
+        if (key == nullptr || key_type == nullptr)
+            return false;
+
+        if (!verify_with_supplied_key(vc, key, key_type))
             return false; // fail-safe: stop at the first failed verification
     }
 
@@ -656,8 +751,10 @@ bool ww::rego::rego_policy_agent::issue_policy_credential(
 
     bool decision = false;
     ww::value::Array verification_tasks;
+    ww::value::Array vc_supplied_verification_tasks;
     ww::value::Object operation;
-    ASSERT_SUCCESS(rsp, combine_results(subpolicy_outputs, decision, verification_tasks, operation, error_msg),
+    ASSERT_SUCCESS(rsp, combine_results(subpolicy_outputs, decision, verification_tasks,
+                                        vc_supplied_verification_tasks, operation, error_msg),
                    error_msg.c_str());
 
     // if any subpolicy denied, stop here -- there is no point verifying signatures
@@ -665,8 +762,12 @@ bool ww::rego::rego_policy_agent::issue_policy_credential(
 
     // ---------- verify the credentials the merged result flagged ----------
     // the C++ verifier is trusted; the Rego ran over as-yet-unverified claims, so
-    // a single failed signature is fail-safe and denies the request
-    ASSERT_SUCCESS(rsp, perform_verification_tasks(verification_tasks, vc_json_by_index),
+    // a single failed signature is fail-safe and denies the request. The two task
+    // lists are verified two different ways: verification_tasks against their
+    // trusted issuers, vc_supplied_verification_tasks against keys the policy supplied.
+    ASSERT_SUCCESS(rsp, perform_trusted_issuer_tasks(verification_tasks, vc_json_by_index),
+                   "policy evaluation denied, credential verification failed");
+    ASSERT_SUCCESS(rsp, perform_supplied_key_tasks(vc_supplied_verification_tasks, vc_json_by_index),
                    "policy evaluation denied, credential verification failed");
 
     // ---------- issue the signed credential ----------

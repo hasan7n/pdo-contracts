@@ -53,5 +53,6 @@ operation := {"name": "do_download", "parameters": {}}
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
+    "vc_supplied_verification_tasks": [],
     "operation": operation,
 }

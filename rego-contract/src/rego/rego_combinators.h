@@ -57,10 +57,13 @@ result := {
 //   Merge the evaluation results every subpolicy produced.
 //   input : { "subpolicy_outputs": [ { "decision": bool,
 //                                "verification_tasks": [ { "index": n }, ... ],
+//                                "vc_supplied_verification_tasks":
+//                                    [ { "index": n, "key": <pem>, "key_type": "ec"|"rsa" }, ... ],
 //                                "operation": { "name": ..., "parameters": {...} } }, ... ] }
 //   output (data.combine.result):
 //           { "decision": bool,                    # true only if every subpolicy allowed
-//             "verification_tasks": [ { "index": n }, ... ],  # deduplicated by index
+//             "verification_tasks": [ ... ],       # trusted-issuer tasks, deduplicated
+//             "vc_supplied_verification_tasks": [ ... ],  # supplied-key tasks, deduplicated
 //             "operation": { ... } }                # all operations merged
 static const char REGO_RESULTS_COMBINATOR[] = R"REGO(
 package combine
@@ -75,14 +78,23 @@ decision if {
     }
 }
 
-# the set of credential indices any subpolicy flagged for verification
-task_indices := {task.index |
+# every distinct trusted-issuer task any subpolicy flagged. The whole task is
+# kept; sets deduplicate identical tasks structurally.
+task_set := {task |
     some o in input.subpolicy_outputs
     some task in object.get(o, "verification_tasks", [])
 }
 
-# one task per unique index (already deduplicated)
-verification_tasks := [{"index": index} | some index in task_indices]
+verification_tasks := [task | some task in task_set]
+
+# every distinct supplied-key task any subpolicy flagged (each carries its own
+# key and key_type).
+vc_supplied_task_set := {task |
+    some o in input.subpolicy_outputs
+    some task in object.get(o, "vc_supplied_verification_tasks", [])
+}
+
+vc_supplied_verification_tasks := [task | some task in vc_supplied_task_set]
 
 # merge every subpolicy's operation into a single object
 operation := object.union_n([op |
@@ -93,6 +105,7 @@ operation := object.union_n([op |
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
+    "vc_supplied_verification_tasks": vc_supplied_verification_tasks,
     "operation": operation,
 }
 )REGO";

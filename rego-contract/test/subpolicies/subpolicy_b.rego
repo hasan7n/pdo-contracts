@@ -47,5 +47,6 @@ operation := {"name": "do_download", "parameters": {"channel_key": channel_key}}
 result := {
     "decision": decision,
     "verification_tasks": verification_tasks,
+    "vc_supplied_verification_tasks": [],
     "operation": operation,
 }

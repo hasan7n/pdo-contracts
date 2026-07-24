@@ -61,11 +61,45 @@
         SCHEMA_KWS(parameters, "{}")            \
     "}"
 
-//   data.subpolicy.result -> { decision, verification_tasks, operation }
-#define REGO_SUBPOLICY_RESULT_SCHEMA                                          \
+// A subpolicy returns its verification tasks in two separate lists, each with a
+// fixed shape, so the contract knows exactly how to verify each one without
+// inspecting the task:
+//
+//   verification_tasks -- [ { "index": <number> }, ... ]
+//       Each credential is verified against the trusted issuer registered for
+//       its credential type. Use this for credentials signed by one of the
+//       contract's registered trusted issuers.
+//
+//   vc_supplied_verification_tasks -- [ { "index": <number>, "key": <pem>,
+//                                        "key_type": "ec"|"rsa" }, ... ]
+//       Each credential is verified against the PEM public key supplied in the
+//       task rather than against a trusted issuer. The key is one the subpolicy
+//       lifted out of another (already verified) credential -- e.g. a wallet's
+//       signing key carried by a WalletSigningKeyCredential, or an RSA public key
+//       a proof-of-possession credential attests to itself. "key_type" selects
+//       the algorithm: "ec" (ECDSA over secp384r1/SHA-384, the scheme PDO
+//       credentials are signed with) or "rsa" (RSASSA-PKCS1-v1_5 over SHA-256).
+//
+// A subpolicy that needs no supplied-key verification returns an empty
+// vc_supplied_verification_tasks list.
+#define REGO_VERIFICATION_TASK_SCHEMA           \
+    "{" SCHEMA_KW(index, 0) "}"
+
+#define REGO_VC_SUPPLIED_VERIFICATION_TASK_SCHEMA       \
+    "{"                                                 \
+        SCHEMA_KW(index, 0) ","                         \
+        SCHEMA_KW(key, "") ","                          \
+        SCHEMA_KW(key_type, "")                         \
+    "}"
+
+//   data.subpolicy.result ->
+//     { decision, verification_tasks, vc_supplied_verification_tasks, operation }
+#define REGO_SUBPOLICY_RESULT_SCHEMA                                    \
     "{"                                                                 \
         SCHEMA_KW(decision, true) ","                                   \
-        SCHEMA_KWS(verification_tasks, "[{" SCHEMA_KW(index, 0) "}]") ","\
+        SCHEMA_KWS(verification_tasks, "[" REGO_VERIFICATION_TASK_SCHEMA "]") "," \
+        SCHEMA_KWS(vc_supplied_verification_tasks,                      \
+                   "[" REGO_VC_SUPPLIED_VERIFICATION_TASK_SCHEMA "]") ","\
         SCHEMA_KWS(operation, REGO_OPERATION_SCHEMA)                    \
     "}"
 
