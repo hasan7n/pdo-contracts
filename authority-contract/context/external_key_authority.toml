@@ -1,0 +1,7 @@
+# -----------------------------------------------------------------
+# identity ${identity}
+# -----------------------------------------------------------------
+[identity.${identity}.external_key_authority]
+identity = "${user}"
+module = "pdo.authority.plugins.external_key_authority"
+source = "${ContractFamily.Authority.external_key_authority.source}"

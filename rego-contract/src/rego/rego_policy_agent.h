@@ -75,7 +75,7 @@
 //       Each credential is verified against the PEM public key supplied in the
 //       task rather than against a trusted issuer. The key is one the subpolicy
 //       lifted out of another (already verified) credential -- e.g. a wallet's
-//       signing key carried by a WalletSigningKeyCredential, or an RSA public key
+//       signing key carried by a WalletVerifyingKeyCredential, or an RSA public key
 //       a proof-of-possession credential attests to itself. "key_type" selects
 //       the algorithm: "ec" (ECDSA over secp384r1/SHA-384, the scheme PDO
 //       credentials are signed with) or "rsa" (RSASSA-PKCS1-v1_5 over SHA-256).
