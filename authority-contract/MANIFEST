@@ -6,6 +6,7 @@ context/external_key_authority.toml
 scripts/init.psh
 pdo/__init__.py
 pdo/authority/__init__.py
+pdo/authority/session_key.py
 pdo/authority/plugins/__init__.py
 pdo/authority/plugins/wallet_key_authority.py
 pdo/authority/plugins/external_key_authority.py

@@ -16,17 +16,25 @@ import json
 import logging
 
 from pdo.contract import invocation_request
+from pdo.submitter.create import create_submitter
 
 import pdo.client.builder as pbuilder
 import pdo.client.builder.command as pcommand
 import pdo.client.builder.contract as pcontract
 import pdo.client.builder.shell as pshell
 import pdo.client.commands.contract as pcontract_cmd
+import pdo.common.crypto as pcrypto
 
+import pdo.client.plugins.common as common
 import pdo.identity.plugins.signature_authority as signature_authority
 import pdo.identity.plugins.policy_agent as policy_agent
+import pdo.authority.plugins.wallet_key_authority as wallet_key_authority
+import pdo.authority.session_key as session_key
 
 logger = logging.getLogger(__name__)
+
+WALLET_VERIFYING_KEY_CREDENTIAL_TYPE = "WalletVerifyingKeyCredential"
+PDO_DID_PREFIX = "did:pdo:"
 
 __all__ = [
     'op_initialize',
@@ -50,6 +58,7 @@ __all__ = [
     'cmd_list_trusted_issuers',
     'cmd_create_external_key_authority',
     'cmd_sign_credential',
+    'cmd_bind_external_key',
     'do_external_key_authority',
     'do_external_key_authority_contract',
     'load_commands',
@@ -70,8 +79,10 @@ op_list_signing_contexts = signature_authority.op_list_signing_contexts
 op_add_vc = signature_authority.op_add_vc
 op_get_vc_list = signature_authority.op_get_vc_list
 op_get_vp = signature_authority.op_get_vp
+op_sign_with_contract_key = signature_authority.op_sign_with_contract_key
 op_verify_credential = signature_authority.op_verify_credential
 
+op_get_contract_metadata = common.op_get_contract_metadata
 op_register_trusted_issuer = policy_agent.op_register_trusted_issuer
 op_list_trusted_issuers = policy_agent.op_list_trusted_issuers
 
@@ -136,17 +147,13 @@ class cmd_create_external_key_authority(pcommand.contract_command_base) :
         subparser.add_argument('--source', help='File that contains contract source code', type=str)
         subparser.add_argument('--extra', help='Extra data associated with the contract file', nargs=2, action='append')
 
-        subparser.add_argument(
-            '-d', '--description',
-            help='Description of the external key authority',
-            type=str, required=True)
-
     @classmethod
-    def invoke(cls, state, context, description, **kwargs) :
+    def invoke(cls, state, context, **kwargs) :
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if save_file :
             return save_file
 
+        # create the contract
         save_file = pcontract_cmd.create_contract_from_context(state, context, 'external_key_authority', **kwargs)
         context['save_file'] = save_file
 
@@ -154,7 +161,26 @@ class cmd_create_external_key_authority(pcommand.contract_command_base) :
         pcontract.invoke_contract_op(
             op_initialize,
             state, context, session,
-            description,
+            context['description'],
+            **kwargs)
+
+        # create the wallet key authority that issues the credentials this authority
+        # consumes, unless it already exists
+        wka_context = context.get_context('wallet_key_authority_context')
+        wka_save_file = pcontract_cmd.get_contract_from_context(state, wka_context)
+        if not wka_save_file :
+            wka_save_file = pcommand.invoke_contract_cmd(
+                wallet_key_authority.cmd_create_wallet_key_authority,
+                state, wka_context,
+                **kwargs)
+
+        # trust the wallet key authority as an issuer of WalletVerifyingKeyCredentials
+        pcommand.invoke_contract_cmd(
+            cmd_register_trusted_issuer,
+            state, context,
+            issuer=wka_context.path,
+            path=['wallet_key_authority'],
+            credential_types=[WALLET_VERIFYING_KEY_CREDENTIAL_TYPE],
             **kwargs)
 
         cls.display('created external key authority in {}'.format(save_file))
@@ -216,6 +242,139 @@ class cmd_sign_credential(pcommand.contract_command_base) :
         return True
 
 
+## -----------------------------------------------------------------
+## bind an external key to a wallet
+## -----------------------------------------------------------------
+class cmd_bind_external_key(pcommand.contract_command_base) :
+    """Generate an external RSA key and bind it to a wallet
+    The wallet must be created and the wallet key authority that issues its
+    verifying key credential must be trusted by this external key authority.
+    """
+
+    name = "bind_external_key"
+    help = "generate an external RSA key and bind it to a wallet"
+
+    @classmethod
+    def add_arguments(cls, subparser) :
+        subparser.add_argument(
+            '-w', '--wallet',
+            help='context of the wallet to bind the external key to',
+            type=str, required=True)
+        subparser.add_argument(
+            '--keys-dir',
+            help='directory where the generated external RSA key pair is written',
+            type=str, required=True)
+
+    @classmethod
+    def get_wallet_credential(cls, state, context, wallet_context, wallet_session, wallet_contract, **kwargs) :
+        """Get a WalletVerifyingKeyCredential for the wallet and store it in the wallet
+
+        The credential comes from the wallet key authority wired into this external
+        key authority's context as the wallet_key_authority_context.
+        """
+
+        wka_context = context.get_context('wallet_key_authority_context')
+        wka_save_file = pcontract_cmd.get_contract_from_context(state, wka_context)
+        if wka_save_file is None :
+            raise ValueError('must create the external key authority prior to binding keys')
+        wka_session = pbuilder.SessionParameters(save_file=wka_save_file)
+
+        # the authority attests the wallet's verifying key from its ledger attestation
+        # and metadata, so we collect both from the ledger and the wallet contract
+        ledger_submitter = create_submitter(state.get(['Ledger']))
+        ledger_attestation = ledger_submitter.get_contract_info(wallet_contract.contract_id)
+
+        contract_metadata = pcontract.invoke_contract_op(
+            op_get_contract_metadata,
+            state, wallet_context, wallet_session,
+            **kwargs)
+        contract_metadata = json.loads(contract_metadata)
+
+        wallet_credential = pcontract.invoke_contract_op(
+            wallet_key_authority.op_sign_credential,
+            state, wka_context, wka_session,
+            wallet_contract.contract_id,
+            wallet_contract.creator_id,
+            ledger_attestation,
+            contract_metadata,
+            **kwargs)
+        wallet_credential = json.loads(wallet_credential)
+
+        # store the credential in the wallet so a later bind can reuse it
+        pcontract.invoke_contract_op(
+            op_add_vc,
+            state, wallet_context, wallet_session,
+            wallet_credential,
+            **kwargs)
+
+        return wallet_credential
+
+    @classmethod
+    def invoke(cls, state, context, wallet, keys_dir, **kwargs) :
+        save_file = pcontract_cmd.get_contract_from_context(state, context)
+        if not save_file :
+            raise ValueError('external key authority contract must be created and initialized')
+        session = pbuilder.SessionParameters(save_file=save_file)
+
+        # resolve the wallet from its context; its contract id is the DID that the
+        # binding payload and the issued credentials are all anchored to
+        wallet_context = pbuilder.Context(state, wallet)
+        wallet_save_file = pcontract_cmd.get_contract_from_context(state, wallet_context)
+        wallet_contract = pcontract_cmd.get_contract(state, wallet_save_file)
+        wallet_did = PDO_DID_PREFIX + wallet_contract.contract_id
+        wallet_session = pbuilder.SessionParameters(save_file=wallet_save_file)
+
+        # generate the external key pair that will be bound to the wallet
+        session_key.generate_rsa_keypair(keys_dir)
+        session_public_pem = session_key.load_public_pem(keys_dir)
+
+        # the binding needs a WalletVerifyingKeyCredential; reuse the one the wallet
+        # already holds, otherwise get a fresh one from the trusted authority
+        vc_map = json.loads(pcontract.invoke_contract_op(
+            op_get_vc_list,
+            state, wallet_context, wallet_session,
+            **kwargs))
+        wallet_credential = vc_map.get(WALLET_VERIFYING_KEY_CREDENTIAL_TYPE)
+        if wallet_credential is None :
+            wallet_credential = cls.get_wallet_credential(
+                state, context,
+                wallet_context, wallet_session, wallet_contract,
+                **kwargs)
+
+        # the wallet and the session key sign the same binding payload; the wallet
+        # signs with its contract key so the signature verifies against its ledger key
+        payload = session_key.build_payload(wallet_did, session_public_pem)
+        b64_payload = pcrypto.byte_array_to_base64(pcrypto.string_to_byte_array(payload))
+        wallet_signature = pcontract.invoke_contract_op(
+            op_sign_with_contract_key,
+            state, wallet_context, wallet_session,
+            b64_payload,
+            **kwargs)
+        wallet_attestation = { 'payload' : payload, 'signature' : json.loads(wallet_signature) }
+        session_key_attestation = { 'payload' : payload, 'signature' : session_key.sign_payload_b64(keys_dir, payload) }
+
+        # the authority checks the credential and both signatures and issues a
+        # publicKeyCredential for the session key
+        public_key_credential = pcontract.invoke_contract_op(
+            op_sign_credential,
+            state, context, session,
+            wallet_credential,
+            wallet_attestation,
+            session_key_attestation,
+            **kwargs)
+        public_key_credential = json.loads(public_key_credential)
+
+        # store the issued credential in the wallet
+        pcontract.invoke_contract_op(
+            op_add_vc,
+            state, wallet_context, wallet_session,
+            public_key_credential,
+            **kwargs)
+
+        cls.display('bound external key to wallet {}'.format(wallet_contract.contract_id))
+        return public_key_credential
+
+
 # -----------------------------------------------------------------
 # Create the generic, shell independent version of the aggregate command
 # -----------------------------------------------------------------
@@ -246,6 +405,7 @@ __commands__ = [
     cmd_list_trusted_issuers,
     cmd_create_external_key_authority,
     cmd_sign_credential,
+    cmd_bind_external_key,
 ]
 
 do_external_key_authority = pcommand.create_shell_command('external_key_authority', __commands__)

@@ -26,12 +26,14 @@ from pdo.authority.plugins.external_key_authority import (
     cmd_verify_credential,
     cmd_create_external_key_authority,
     cmd_sign_credential,
+    cmd_bind_external_key,
 )
 from pdo.client.builder import Context
 from pdo.client.commands import contract as pcontract_cmd
 import pdo.client.builder.command as pcommand
 
 CONTEXT_FILES = os.path.join(os.environ["PDO_HOME"], "contracts/authority/context")
+IDENTITY_CONTEXT_FILES = os.path.join(os.environ["PDO_HOME"], "contracts/identity/context")
 
 
 def _generate_random_label(length=8):
@@ -45,6 +47,19 @@ def _setup_context(state, user):
     Context.LoadContextFile(state, bindings, context_file)
     context = Context(state, prefix=f"identity.{label}.external_key_authority")
     return context
+
+
+def _setup_wallet_context(state, user, wallet_contract_id):
+    label = _generate_random_label()
+    bindings = {"user": user, "identity": label}
+    context_file = os.path.join(IDENTITY_CONTEXT_FILES, "identity.toml")
+    Context.LoadContextFile(state, bindings, context_file)
+    wallet_context_path = f"identity.{label}.wallet"
+    state.set(
+        ["context"] + wallet_context_path.split(".") + ["contract_id"],
+        wallet_contract_id,
+    )
+    return wallet_context_path
 
 
 def _invoke_external_key_authority(state, contract_id, user, cmd_class, **cmd_args):
@@ -80,6 +95,14 @@ def verify_credential(state, contract_id, user, **cmd_args):
 def sign_credential(state, contract_id, user, **cmd_args):
     return _invoke_external_key_authority(
         state, contract_id, user, cmd_sign_credential, **cmd_args
+    )
+
+
+def bind_external_key(state, contract_id, wallet_contract_id, user, **cmd_args):
+    wallet_context_path = _setup_wallet_context(state, user, wallet_contract_id)
+    cmd_args["wallet"] = wallet_context_path
+    return _invoke_external_key_authority(
+        state, contract_id, user, cmd_bind_external_key, **cmd_args
     )
 
 

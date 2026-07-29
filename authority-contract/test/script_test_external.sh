@@ -19,25 +19,22 @@
 # person who owns a PDO wallet binds an external RSA key pair to it.
 #
 # Setup: the person creates a wallet_key_authority and an external_key_authority,
-# and registers the wallet_key_authority as a trusted issuer of the external one.
+# and registers the wallet_key_authority as a trusted issuer of the external one,
+# then creates the wallet (a plain identity contract).
 #
-# Then, to bind an external key:
-#   1. the consumer gets a WalletVerifyingKeyCredential for their wallet from the
-#      trusted wallet_key_authority (which verifies the wallet's ledger attestation)
-#   2. generates the external rsa key pair and builds the payload
-#      { identity: <wallet did>, session_key: <rsa pub> }, signing it with the rsa
-#      private key
-#   3. has the WALLET sign the same payload with its own contract key
-#      (sign_with_contract_key)
-#   4. submits the WalletVerifyingKeyCredential + both signatures to the
-#      external_key_authority
+# Binding is then driven by a single command, external_key_authority
+# bind_external_key --wallet <context> --keys-dir <dir>, which:
+#   1. generates the external rsa key pair and builds the payload
+#      { identity: <wallet did>, session_key: <rsa pub> }
+#   2. gets a WalletVerifyingKeyCredential for the wallet from the trusted
+#      wallet_key_authority (discovered from the external_key_authority's trusted
+#      issuers) and stores it in the wallet -- unless the wallet already holds one
+#   3. has the wallet sign the payload with its contract key and signs the same
+#      payload with the rsa private key
+#   4. submits the credential + both signatures to the external_key_authority, which
+#      issues a publicKeyCredential, and stores that credential in the wallet
 #
-# The authority verifies the WalletVerifyingKeyCredential against its trusted issuer,
-# takes the wallet DID (subject) and verifying key (claim) from it, verifies the
-# wallet's signature against that key (SHA-256 ECDSA) and the rsa signature against
-# the public key in the payload (RSASSA-PKCS1-v1_5 / SHA-256), confirms the payloads
-# match, and issues a publicKeyCredential for the session key. Everything signs
-# on-chain -- there is no locally modeled wallet key.
+# The test then confirms the wallet holds both credentials via get_vp.
 #
 # Requires a live PDO deployment (ledger + enclave/provisioning/storage services).
 # -----------------------------------------------------------------
@@ -148,15 +145,13 @@ try pdo-sservice create_from_site ${SHORT_OPTS} --file ${F_SERVICE_SITE_FILE} --
              --replicas 1 --duration 60
 
 # -----------------------------------------------------------------
-# contexts: the operator (user1) runs the two authorities; the consumer (user2)
-# owns the wallet. Because the wallet's creator is read from the ledger and passed
-# to the authority, the operator can attest the consumer's wallet.
+# contexts: the operator (user1) runs the external key authority, whose context
+# also carries its wallet key authority; the consumer (user2) owns the wallet.
+# Because the wallet's creator is read from the ledger and passed to the authority,
+# the operator can attest the consumer's wallet.
 # -----------------------------------------------------------------
 cd "${SOURCE_ROOT}"
 rm -f ${F_CONTEXT_FILE}
-
-try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/wallet_key_authority.toml \
-    --bind identity wka --bind user user1
 
 try pdo-context load ${OPTS} --import-file ${F_CONTEXT_TEMPLATES}/external_key_authority.toml \
     --bind identity eka --bind user user1
@@ -168,77 +163,44 @@ try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/identity.toml
 # start the tests
 # =================================================================
 
-########### setup: the operator creates both authorities and links their trust
-yell create the wallet key authority and install the ledger root of trust
-try wallet_key_authority create ${OPTS} --contract identity.wka.wallet_key_authority \
-    -d 'Wallet Key Authority: attests wallet verifying keys from ledger attestations'
-
-yell create the external key authority
-try external_key_authority create ${OPTS} --contract identity.eka.external_key_authority \
-    -d 'External Key Authority: binds external session keys to wallets'
-
-yell trust the wallet key authority as an issuer of WalletVerifyingKeyCredentials
-try external_key_authority register ${OPTS} --contract identity.eka.external_key_authority \
-    --issuer identity.wka.wallet_key_authority --path wallet_key_authority \
-    --credential-types WalletVerifyingKeyCredential
+########### setup: the operator creates the external key authority
+# creating the external key authority also creates the wallet key authority carried
+# in its context and trusts it as an issuer of WalletVerifyingKeyCredentials
+yell create the external key authority and its wallet key authority
+try external_key_authority create ${OPTS} --contract identity.eka.external_key_authority
 
 ########### setup: the consumer's wallet
 yell create the consumer wallet
 try id_wallet create ${OPTS} --contract identity.wallet.wallet \
-    -d 'the consumer''s pdo wallet'
+    -d 'the consumer pdo wallet'
 
-# the consumer discovers their wallet id by listing their contracts from the
-# ledger. The user_contracts table is keyed by the user's verifying key; user2
-# owns only the wallet, so it is the single entry.
-yell list the consumer wallets from the ledger to find the wallet id
-try pdo-ledger user-contracts --url ${F_LEDGER_URL} \
-    --key-file ${PDO_HOME}/keys/user2_private.pem --path entries > ${TEST_ROOT}/user_contracts.json
-WALLET_ID=$(python3 -c "import json; print(json.load(open('${TEST_ROOT}/user_contracts.json'))[0]['contract_id'])")
-WALLET_DID="did:pdo:${WALLET_ID}"
-say "wallet DID: ${WALLET_DID}"
-
-########### the consumer gets a WalletVerifyingKeyCredential from the trusted issuer
-yell get a WalletVerifyingKeyCredential for the wallet from the wallet key authority
-try wallet_key_authority sign_credential ${OPTS} \
-    --contract identity.wka.wallet_key_authority \
-    --wallet identity.wallet.wallet \
-    --credential ${TEST_ROOT}/wallet_verifying_key_vc.json
-
-########### the consumer builds and signs the binding payload
-yell generate the external rsa key and build the payload + session-key attestation
-try python3 ${SCRIPTDIR}/make_external_key_attestations.py keys ${TEST_ROOT}/keys
-try python3 ${SCRIPTDIR}/make_external_key_attestations.py build \
-    ${TEST_ROOT}/keys "${WALLET_DID}" \
-    ${TEST_ROOT}/payload.json ${TEST_ROOT}/session_key_attestation.json
-
-yell the wallet signs the same payload with its contract key
-try id_wallet sign_with_contract_key ${OPTS} --contract identity.wallet.wallet \
-    --message ${TEST_ROOT}/payload.json --signature ${TEST_ROOT}/wallet_signature.txt
-
-try python3 ${SCRIPTDIR}/make_external_key_attestations.py wallet_attestation \
-    ${TEST_ROOT}/payload.json ${TEST_ROOT}/wallet_signature.txt ${TEST_ROOT}/wallet_attestation.json
-
-########### bind the external session key
-yell verify everything and issue a publicKeyCredential for the session key
-try external_key_authority sign_credential ${OPTS} \
+########### bind an external rsa key to the wallet in one command
+# bind_external_key runs as the wallet owner (user2): it generates the external
+# rsa key, gets a WalletVerifyingKeyCredential from the trusted wallet key
+# authority (storing it in the wallet), gets a publicKeyCredential from the
+# external key authority, and stores it in the wallet.
+yell bind an external rsa key to the consumer wallet
+try external_key_authority bind_external_key ${OPTS} --identity user2 \
     --contract identity.eka.external_key_authority \
-    --wallet-verifying-key-credential ${TEST_ROOT}/wallet_verifying_key_vc.json \
-    --wallet-attestation ${TEST_ROOT}/wallet_attestation.json \
-    --session-key-attestation ${TEST_ROOT}/session_key_attestation.json \
-    --credential ${TEST_ROOT}/session_key_vc.json
+    --wallet identity.wallet.wallet \
+    --keys-dir ${TEST_ROOT}/keys
 
-say issued credential:
-cat ${TEST_ROOT}/session_key_vc.json
+########### the wallet now holds both credentials
+# get_vp fails if either type is missing, so this confirms both were stored
+yell confirm the wallet holds the verifying-key and the public-key credentials
+try id_wallet get_vp ${OPTS} --identity user2 --contract identity.wallet.wallet \
+    --types WalletVerifyingKeyCredential publicKeyCredential \
+    --file ${TEST_ROOT}/wallet_vp.json
+
+say wallet presentation:
+cat ${TEST_ROOT}/wallet_vp.json
 echo
 
-if ! grep -q "publicKeyCredential" ${TEST_ROOT}/session_key_vc.json ; then
-    die "issued credential is not a publicKeyCredential"
-fi
-
-########### verify the issued credential against the authority
-yell verify the issued credential against the authority
-try external_key_authority verify_credential ${OPTS} \
+########### a second bind reuses the stored WalletVerifyingKeyCredential
+yell bind again to confirm the stored WalletVerifyingKeyCredential is reused
+try external_key_authority bind_external_key ${OPTS} --identity user2 \
     --contract identity.eka.external_key_authority \
-    --signed-credential ${TEST_ROOT}/session_key_vc.json
+    --wallet identity.wallet.wallet \
+    --keys-dir ${TEST_ROOT}/keys2
 
 yell All tests passed

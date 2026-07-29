@@ -165,13 +165,8 @@ class cmd_create_wallet_key_authority(pcommand.contract_command_base) :
         subparser.add_argument('--source', help='File that contains contract source code', type=str)
         subparser.add_argument('--extra', help='Extra data associated with the contract file', nargs=2, action='append')
 
-        subparser.add_argument(
-            '-d', '--description',
-            help='Description of the wallet key authority',
-            type=str, required=True)
-
     @classmethod
-    def invoke(cls, state, context, description, **kwargs) :
+    def invoke(cls, state, context, **kwargs) :
         save_file = pcontract_cmd.get_contract_from_context(state, context)
         if save_file :
             return save_file
@@ -184,7 +179,7 @@ class cmd_create_wallet_key_authority(pcommand.contract_command_base) :
         pcontract.invoke_contract_op(
             op_initialize,
             state, context, session,
-            description,
+            context['description'],
             **kwargs)
 
         # install the ledger's verifying key as the attestation root of trust

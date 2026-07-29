@@ -159,8 +159,7 @@ try pdo-context load ${OPTS} --import-file ${F_IDENTITY_TEMPLATES}/identity.toml
 
 ########### setup: the wallet key authority
 yell create the wallet key authority and install the ledger root of trust
-try wallet_key_authority create ${OPTS} --contract identity.key_authority.wallet_key_authority \
-    -d 'Wallet Key Authority: issues WalletVerifyingKeyCredentials from ledger attestations'
+try wallet_key_authority create ${OPTS} --contract identity.key_authority.wallet_key_authority
 
 yell export the authority issuer verifying key for its trusted-issuer registration
 try wallet_key_authority get_verifying_key ${OPTS} \
