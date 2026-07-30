@@ -276,7 +276,29 @@ class cmd_bind_external_key(pcommand.contract_command_base) :
         wka_context = context.get_context('wallet_key_authority_context')
         wka_save_file = pcontract_cmd.get_contract_from_context(state, wka_context)
         if wka_save_file is None :
-            raise ValueError('must create the external key authority prior to binding keys')
+            # A caller may have built a fresh context tree that never carried
+            # the wka's contract_id into wallet_key_authority_context (e.g.
+            # one generated per call, disconnected from the tree used at
+            # creation time). Recover it from this eka's own trusted-issuer
+            # list, which always trusts exactly one issuer for
+            # WalletVerifyingKeyCredential (registered by
+            # cmd_create_external_key_authority).
+            save_file = pcontract_cmd.get_contract_from_context(state, context)
+            session = pbuilder.SessionParameters(save_file=save_file)
+            raw_issuers = pcontract.invoke_contract_op(
+                op_list_trusted_issuers, state, context, session, **kwargs)
+            issuers = json.loads(raw_issuers) if isinstance(raw_issuers, str) else (raw_issuers or {})
+            wka_id = next(
+                (issuer_id for issuer_id, entries in issuers.items()
+                 for entry in (entries or [])
+                 if WALLET_VERIFYING_KEY_CREDENTIAL_TYPE in (entry.get('credential_types') or [])),
+                None)
+            if wka_id is None :
+                raise ValueError('external key authority has no trusted wallet_key_authority registered')
+            wka_context.set('contract_id', wka_id)
+            wka_save_file = pcontract_cmd.get_contract_from_context(state, wka_context)
+            if wka_save_file is None :
+                raise ValueError('unable to locate wallet key authority contract on the ledger')
         wka_session = pbuilder.SessionParameters(save_file=wka_save_file)
 
         # the authority attests the wallet's verifying key from its ledger attestation
