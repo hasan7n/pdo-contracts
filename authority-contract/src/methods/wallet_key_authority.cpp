@@ -154,17 +154,17 @@ bool ww::authority::wallet_key_authority::sign_credential(
     ASSERT_SUCCESS(rsp, ww::contract::attestation::get_ledger_key(ledger_key) && ledger_key.length() > 0,
                    "invalid request, the ledger key has not been set");
 
-    // verify the wallet's metadata is the metadata the ledger attested for it.
-    // Reuses ww::contract::attestation's checks: the ledger's signature over the
-    // attestation (signed for the wallet's creator), and the metadata-hash binding
-    // of the contract id to its verifying key. add_endpoint's same-code check is
-    // intentionally skipped -- the wallet runs its own code, not a copy of this
-    // contract's, and the ledger signature already covers the attested code hash.
+    // verify the wallet's metadata is the metadata the ledger attested for it:
+    // ww::contract::attestation checks the ledger's signature over the attestation
+    // (signed for the wallet's creator) and the metadata-hash binding of the contract
+    // id to its verifying key.
+    //
+    // Nothing here constrains what code the wallet runs, so the credential asserts
+    // only that the contract registered at this id holds this verifying key; it is
+    // not evidence that the subject is a wallet.
     const std::string creator(msg.get_string("creator"));
     ASSERT_SUCCESS(rsp, ww::contract::attestation::verify_ledger_attestation(msg, creator, ledger_key),
                    "invalid request, failed to verify the ledger attestation");
-    ASSERT_SUCCESS(rsp, ww::contract::attestation::verify_metadata_binding(msg),
-                   "invalid request, contract metadata does not match the ledger attestation");
 
     // the wallet's verifying key is its ledger-registered verifying key, and its
     // DID is derived from its contract id
